@@ -1,0 +1,39 @@
+# dependencies
+/node_modules
+/.pnp
+.pnp.*
+.yarn/*
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# env
+.env*.local
+.env
+.venv/
+
+# IDE
+.idea
+.vscode/*
+!.vscode/extensions.json
+.cursor/
+.agents/
+
+# OS
+.DS_Store
+
+# repos references
+repo/
+
+# blockchain data
+backend/blockchain-besu-ibft/Node-*/data/DATABASE_METADATA.json
+backend/blockchain-besu-ibft/Node-*/data/VERSION_METADATA.json
+backend/blockchain-besu-ibft/Node-*/data/besu.networks
+backend/blockchain-besu-ibft/Node-*/data/besu.ports
+backend/blockchain-besu-ibft/Node-*/data/caches/
+backend/blockchain-besu-ibft/Node-*/data/database/
+
+# ipfs cluster runtime data
+backend/ipfs-cluster-private/compose/
