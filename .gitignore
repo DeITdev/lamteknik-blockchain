@@ -37,6 +37,8 @@ backend/blockchain-besu-ibft/Node-*/data/database/
 
 # ipfs cluster runtime data
 backend/ipfs-cluster-private/compose/
+backend/ipfs-cluster-private/swarm.key
+backend/ipfs-cluster-private/assets/webui-v4.12.0.car
 
 # API runtime / build output
 API/node_modules/
