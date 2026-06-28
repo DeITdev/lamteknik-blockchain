@@ -1,0 +1,353 @@
+{
+  "info": {
+    "_postman_id": "a7c2d3e4-5f6a-7b8c-9d0e-lamteknik0002",
+    "name": "LamTeknik API",
+    "description": "Importable Postman collection for API/server-lamteknik.js (default port 4100). All entity routes are templated with the {{entity}} environment variable so the same 8 requests cover every LamTeknik contract.\n\nValid entity slugs (set as `entity` in the env):\nakreditasi, asesmen-kecukupan, asesmen-lapangan, asesor, bank, institusi, jenjang, keputusan-ma, klaster-ilmu, klaster-prodi, klaster-profesi, komite-evaluasi, laporan-asesmen, majelis-akreditasi, pembayaran, penawaran-asesor, pengesahan-ak, pengesahan-al, prodi, provinsi, respon-asesor, sekretariat, tenant, upps, user, validator\n\nUse the `LamTeknik (local)` environment that ships next to this collection. The `privateKey` env var is optional; if left empty the collection's pre-request script strips it from the POST body and the server falls back to DEPLOYER_PRIVATE_KEY / DEFAULT_PRIVATE_KEY in API/.env.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// 1) Re-encode the env `allData` as a JSON-escaped string so the body",
+          "//    sends it as a STRING (which is what server-lamteknik.js expects).",
+          "//    The env stores plain JSON like {\"id\":42,...}; we wrap it with",
+          "//    JSON.stringify so the body literal becomes \"{\\\"id\\\":42,...}\".",
+          "const allDataRaw = pm.environment.get('allData') || '';",
+          "pm.variables.set('allDataJson', JSON.stringify(allDataRaw));",
+          "",
+          "// 2) Strip an empty `privateKey` from POST bodies so the server can",
+          "//    fall back to its DEPLOYER_PRIVATE_KEY / DEFAULT_PRIVATE_KEY env.",
+          "if (pm.request.method === 'POST') {",
+          "  const body = pm.request.body;",
+          "  const raw = body && body.raw;",
+          "  if (raw && /\"privateKey\":\\s*\"\"/.test(raw)) {",
+          "    body.raw = raw.replace(/,\\s*\"privateKey\":\\s*\"\"/, '');",
+          "  }",
+          "}"
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "txHash",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Diagnostics",
+      "description": "Server-wide diagnostic endpoints, not tied to any single entity.",
+      "item": [
+        {
+          "name": "GET /health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["health"]
+            },
+            "description": "Pings the Besu RPC and returns block number + how many LamTeknik contracts the server loaded."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('healthy', () => {",
+                  "  const j = pm.response.json();",
+                  "  pm.expect(j.success).to.eql(true);",
+                  "  pm.expect(j.status).to.eql('healthy');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /lamteknik (list entities)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/lamteknik",
+              "host": ["{{baseUrl}}"],
+              "path": ["lamteknik"]
+            },
+            "description": "Lists every loaded LamTeknik entity with its slug, contract name, registry key, and on-chain address."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('success', () => pm.expect(pm.response.json().success).to.eql(true));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /contracts",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/contracts",
+              "host": ["{{baseUrl}}"],
+              "path": ["contracts"]
+            },
+            "description": "Returns a slug -> { contractName, registryKey, address } map for all loaded LamTeknik contracts."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('success', () => pm.expect(pm.response.json().success).to.eql(true));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Entity (templated by {{entity}})",
+      "description": "Eight requests that all hit /lamteknik/{{entity}}/.... Change the `entity` env variable to retarget every request at a different contract (akreditasi, asesor, bank, ...).",
+      "item": [
+        {
+          "name": "GET /lamteknik/{{entity}} (retrieve)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/lamteknik/{{entity}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["lamteknik", "{{entity}}"]
+            },
+            "description": "Calls `retrieve()` on the entity contract, returning { total, ids }."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('success', () => pm.expect(pm.response.json().success).to.eql(true));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /lamteknik/{{entity}}/count",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/lamteknik/{{entity}}/count",
+              "host": ["{{baseUrl}}"],
+              "path": ["lamteknik", "{{entity}}", "count"]
+            },
+            "description": "Calls `getTotal<Entity>()` on the entity contract."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('success', () => pm.expect(pm.response.json().success).to.eql(true));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /lamteknik/{{entity}}/ids",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/lamteknik/{{entity}}/ids",
+              "host": ["{{baseUrl}}"],
+              "path": ["lamteknik", "{{entity}}", "ids"]
+            },
+            "description": "Calls `getAll<Entity>Ids()` on the entity contract."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('success', () => pm.expect(pm.response.json().success).to.eql(true));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /lamteknik/{{entity}}/index/{{index}}",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/lamteknik/{{entity}}/index/{{index}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["lamteknik", "{{entity}}", "index", "{{index}}"]
+            },
+            "description": "Calls `get<Entity>IdByIndex(i)` on the entity contract."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('success', () => pm.expect(pm.response.json().success).to.eql(true));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /lamteknik/{{entity}}/{{recordId}}",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/lamteknik/{{entity}}/{{recordId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["lamteknik", "{{entity}}", "{{recordId}}"]
+            },
+            "description": "Calls `get<Entity>(recordId)` on the entity contract and returns the full CDC envelope row."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('success', () => pm.expect(pm.response.json().success).to.eql(true));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /lamteknik/{{entity}}/{{recordId}}/metadata",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/lamteknik/{{entity}}/{{recordId}}/metadata",
+              "host": ["{{baseUrl}}"],
+              "path": ["lamteknik", "{{entity}}", "{{recordId}}", "metadata"]
+            },
+            "description": "Calls `get<Entity>Metadata(recordId)` (timestamps + modifiedBy, no allData blob)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('success', () => pm.expect(pm.response.json().success).to.eql(true));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /lamteknik/{{entity}}/{{recordId}}/exists",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/lamteknik/{{entity}}/{{recordId}}/exists",
+              "host": ["{{baseUrl}}"],
+              "path": ["lamteknik", "{{entity}}", "{{recordId}}", "exists"]
+            },
+            "description": "Calls `does<Entity>Exist(recordId)`; returns { exists: boolean }."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('success', () => pm.expect(pm.response.json().success).to.eql(true));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /lamteknik/{{entity}} (store)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"recordId\": \"{{recordId}}\",\n  \"createdTimestamp\": {{createdTimestamp}},\n  \"modifiedTimestamp\": {{modifiedTimestamp}},\n  \"modifiedBy\": \"{{modifiedBy}}\",\n  \"allData\": {{allDataJson}},\n  \"privateKey\": \"{{privateKey}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/lamteknik/{{entity}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["lamteknik", "{{entity}}"]
+            },
+            "description": "Calls `store<Entity>(recordId, createdTimestamp, modifiedTimestamp, modifiedBy, allData)` on the entity contract.\n\n`allData` should be a JSON STRING (the full row payload, escaped). The default in the env is already an escaped JSON string. If `privateKey` is empty, the collection pre-request script strips it from the body and the server falls back to DEPLOYER_PRIVATE_KEY / DEFAULT_PRIVATE_KEY in API/.env."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const j = pm.response.json();",
+                  "pm.test('success', () => pm.expect(j.success).to.eql(true));",
+                  "if (j && j.transactionHash) {",
+                  "  pm.collectionVariables.set('txHash', j.transactionHash);",
+                  "  console.log('Saved txHash =', j.transactionHash);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

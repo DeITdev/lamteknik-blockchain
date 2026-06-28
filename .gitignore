@@ -37,3 +37,9 @@ backend/blockchain-besu-ibft/Node-*/data/database/
 
 # ipfs cluster runtime data
 backend/ipfs-cluster-private/compose/
+
+# API runtime / build output
+API/node_modules/
+API/build/
+API/artifacts/
+API/cache/
