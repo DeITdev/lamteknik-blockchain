@@ -48,3 +48,9 @@ API/node_modules/
 API/build/
 API/artifacts/
 API/cache/
+
+# connection / CDC consumer
+connection/consumer-lamteknik/.env.local
+connection/consumer-lamteknik/node_modules/
+connection/consumer-lamteknik/utils/config/lamteknik-connector.json
+connection/consumer-lamteknik/config/table-mapping.json
