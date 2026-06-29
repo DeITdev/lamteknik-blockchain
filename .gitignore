@@ -24,6 +24,9 @@ yarn-error.log*
 # OS
 .DS_Store
 
+# temporary working files
+.tmp_*
+
 # repos references
 repo/
 
