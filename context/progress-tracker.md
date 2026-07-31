@@ -4,11 +4,11 @@ Update this file after every meaningful implementation change.
 
 ## Current Phase
 
-**Phase 4 — Connection / CDC layer** complete. Next: populate `target/` source application and end-to-end integration test with a live database.
+**Phase 5 — Target application + LamTeknik web UI** complete. End-to-end CDC verification depends on running Besu, API, Kafka, and consumer locally.
 
 ## Current Goal
 
-- Wire a real source database in `target/` and validate full CDC → Kafka → consumer → Besu + IPFS flow.
+- Run full stack and validate CDC smoke test (row change → Kafka → Besu).
 - Complete `API/command/how-to-ipfs-api.md` when IPFS REST endpoints are added to the API layer.
 
 ---
@@ -28,51 +28,53 @@ Update this file after every meaningful implementation change.
 - **Postman collection** — diagnostics + templated entity requests.
 - **Guides** — `how-to-smart-contract.md`, `how-to-blockchain-api.md`.
 
-### Frontend demo (`frontend/file_manager/`)
+### Frontend
 
-- Next.js file manager with direct IPFS upload + `DocumentCertificate` on-chain events.
-- Separate from CDC path — demonstrates synchronous Besu + IPFS integration.
+- **`frontend/file_manager/`** — Next.js file manager with direct IPFS upload + on-chain events (CDC demo separate).
+- **`frontend/lamteknik-web/`** — LamTeknik SaaS UI (68 routes) copied from `repo/Blockchain_lamtek/frontend/`; API at `:3001`, dev port `:3002`.
+
+### Target source application (`target/`)
+
+- **`target/backend/`** — NestJS 10 + TypeORM + MySQL copied from source repo; in-backend Kafka CDC **disabled** (uses `connection/` instead).
+- **`target/docker-compose.yml`** — MySQL `:3307` (binlog ROW), Redis, API `:3001`.
+- **`target/backend/database/init/02-cdc-user.sql`** — Debezium replication user.
+- **`target/backend/scripts/load-sql-seeds.js`** — loads demo SQL seeds after migrations.
+- **`target/command/run-target.md`** — startup guide.
+- **`target/command/contract-table-mapping.md`** — 26 on-chain tables vs off-chain tables.
 
 ### Connection / CDC (`connection/`)
 
-- **`kafka-debezium/docker-compose.yml`** — Zookeeper, Kafka (`:29092`), Debezium Connect (`:8083`), Kafka UI (`:8085`). Copied from `repo/blockchain-erp-integration/`.
-- **`consumer-lamteknik/server.js`** — Kafka consumer ported from `consumer-erp` reference with LamTeknik adaptations:
-  - Table → entity slug mapping (auto + `config/table-mapping.json` overrides)
-  - IPFS upload for file/binary columns before blockchain write
-  - `POST /lamteknik/{entity}` with CDC envelope
-  - Batch processing, concurrency limiter, content dedup, GET-before-POST idempotency
-  - Soft-delete support via `CDC_WRITE_DELETES=true`
-- **`consumer-lamteknik/utils/`** — connector registration, topic check, DB/API/Kafka test scripts.
-- **`consumer-lamteknik/.env.example`** — env-driven config (`CDC_DB_TYPE`, `TARGET_TABLES`, etc.).
+- **`kafka-debezium/docker-compose.yml`** — Zookeeper, Kafka (`:29092`), Debezium Connect (`:8083`), Kafka UI (`:8085`).
+- **`consumer-lamteknik/server.js`** — Kafka consumer with LamTeknik entity mapping, IPFS routing, blockchain API writes.
+- **`consumer-lamteknik/config/table-mapping.json`** — plural overrides (`users`→`user`, `tenants`→`tenant`, etc.).
+- **`consumer-lamteknik/.env.local`** — points at target MySQL `:3307` / `lamtek_db`.
+- **`add-lamteknik-connector.js`** — `snapshot.mode=never` (future changes only).
 - **Command docs** — `run-kafka-debezium.md`, `configure-cdc.md`, `run-kafka-consumer.md`.
-- **`connection/plan.md`** — architecture overview.
 
 ### Context
 
-- **`context/project-overview.md`** — rewritten for CDC template + LamTeknik reference case.
+- **`context/project-overview.md`** — updated with `lamteknik-web` in frontend map.
 - **`context/progress-tracker.md`** — this file.
 
 ---
 
 ## In Progress
 
-- Nothing actively in development.
+- Full-stack verification (Besu + IPFS + API + target + Kafka + consumer + frontend) — run locally per `target/command/run-target.md`.
 
 ---
 
 ## Next Up
 
-1. **Populate `target/`** — add the LamTeknik source application (or a minimal sample DB schema) with CDC-enabled database.
-2. **End-to-end test** — register connector against live DB, verify rows appear on Besu via API.
-3. **IPFS API guide** — `API/command/how-to-ipfs-api.md` (currently TODO).
-4. **Optional** — port `performance-monitor.js` from ERP reference for latency benchmarking.
+1. **End-to-end CDC smoke test** — update an `akreditasi` row, confirm topic + `GET /lamteknik/akreditasi/{id}` on `:4100`.
+2. **IPFS API guide** — `API/command/how-to-ipfs-api.md`.
+3. **Optional** — port `performance-monitor.js` from ERP reference for latency benchmarking.
 
 ---
 
 ## Open Questions
 
 - Should delete events (`op: d`) always soft-delete on-chain, or remain skipped by default (`CDC_WRITE_DELETES=false`)?
-- When `target/` is populated, will it use MySQL (like ERP reference) or PostgreSQL?
 - Should the File Manager eventually use CDC instead of synchronous writes, or stay as a separate demo?
 - Production connector credentials and secret management strategy?
 
@@ -80,18 +82,16 @@ Update this file after every meaningful implementation change.
 
 ## Architecture Decisions
 
-- **Reference pattern** — CDC consumer follows `repo/blockchain-erp-integration/consumer-erp/` (single `server.js`, `.env.local`, utils scripts).
-- **IPFS + blockchain** — file bytes go to IPFS; CID embedded in on-chain `allData` (not IPFS-only).
-- **Env-driven DB switching** — `CDC_DB_TYPE` selects Debezium connector class; no code changes needed.
-- **API as write gateway** — consumer calls `server-lamteknik.js` REST API, not ethers directly (matches ERP reference).
-- **Debezium unwrap transform** — `ExtractNewRecordState` for flat JSON messages.
-- **File Manager stays separate** — direct upload demo coexists with CDC; no double-write until `target/` defines the source of truth.
+- **Target CDC** — monorepo `connection/consumer-lamteknik` only; NestJS `KafkaModule` removed from `target/backend`.
+- **Dual write paths** — CDC (Debezium→API→Besu) for entity tables; app sync path (NestJS→Kubo `:5001`) for dokumen uploads.
+- **Reference pattern** — CDC consumer follows `repo/blockchain-erp-integration/consumer-erp/`.
+- **Env-driven DB switching** — `CDC_DB_TYPE` selects Debezium connector class.
+- **File Manager stays separate** — coexists with `lamteknik-web`; no merge.
 
 ---
 
 ## Session Notes
 
-- Previous `context/` files contained unrelated Unity/Larasdyah content — replaced 2026-06-29.
-- `connection/consumer-lamteknik/server.js` was empty before this implementation.
-- Connector registration lives in `consumer-lamteknik/utils/` (not `kafka-debezium/scripts/`) per ERP reference layout.
-- PostgreSQL/MongoDB/SQL Server connector configs are generated but table validation is only implemented for MySQL and PostgreSQL.
+- LamTeknik source migrated from `repo/Blockchain_lamtek/` 2026-06-29 (copy only, repo unchanged).
+- Target MySQL uses host port **3307** to avoid local MySQL conflicts.
+- Demo login from SQL seed: `admin@lamtek.test` / `Test1234!`.

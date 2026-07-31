@@ -1,3 +1,3 @@
-# PLAN
+# LamTeknik source application
 
-// TODO place the targeted database system that want to being watch in here
+NestJS API + MySQL (CDC source). See [command/run-target.md](command/run-target.md).

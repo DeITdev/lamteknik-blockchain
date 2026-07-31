@@ -1,0 +1,87 @@
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: lamteknik-target-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: root_password
+      MYSQL_DATABASE: lamtek_db
+      MYSQL_USER: lamtek
+      MYSQL_PASSWORD: lamtek123
+    command: >
+      --server-id=1
+      --log-bin=mysql-bin
+      --binlog-format=ROW
+      --binlog-row-image=FULL
+      --default-storage-engine=InnoDB
+    ports:
+      - "3307:3306"
+    volumes:
+      - lamteknik-mysql-data:/var/lib/mysql
+      - ./backend/database/init/02-cdc-user.sql:/docker-entrypoint-initdb.d/02-cdc-user.sql:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-proot_password"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - lamteknik-target
+
+  redis:
+    image: redis:7-alpine
+    container_name: lamteknik-target-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - lamteknik-target
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: lamteknik-target-api
+    ports:
+      - "3001:3000"
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+      TYPEORM_SYNCHRONIZE: "false"
+      SEED_ON_STARTUP: "true"
+      LOAD_SQL_SEEDS: "true"
+      DATABASE_URL: mysql://lamtek:lamtek123@mysql:3306/lamtek_db
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_USERNAME: lamtek
+      DB_PASSWORD: lamtek123
+      DB_DATABASE: lamtek_db
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: lamtek-secret-key-2025
+      JWT_EXPIRES_IN: 24h
+      CORS_ORIGINS: "localhost,http://localhost:3002,http://localhost:3001"
+      BESU_RPC_URL: http://host.docker.internal:8545
+      BESU_WS_URL: ws://host.docker.internal:8546
+      IPFS_API_URL: http://host.docker.internal:5001
+      IPFS_GATEWAY_URL: http://host.docker.internal:8080
+      DATA_FILE_WORKFLOW_MODE: sync
+      SIGNER_MODE: direct
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - lamteknik-target
+
+volumes:
+  lamteknik-mysql-data:
+
+networks:
+  lamteknik-target:
+    driver: bridge

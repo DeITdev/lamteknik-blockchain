@@ -35,6 +35,7 @@ flowchart LR
 
   subgraph frontend [frontend/]
     FileManager[file_manager demo]
+    LamteknikWeb[lamteknik-web :3002]
   end
 
   TargetApp --> SourceDB
@@ -44,6 +45,7 @@ flowchart LR
   RestAPI --> Contracts
   FileManager -->|direct upload demo| IPFS
   FileManager -->|direct write demo| Besu
+  LamteknikWeb --> TargetApp
 ```
 
 ## Data routing rules
@@ -65,8 +67,9 @@ The on-chain CDC envelope (all entities):
 | [`backend/ipfs-cluster-private/`](../backend/ipfs-cluster-private/) | Private IPFS Cluster (4 peers) |
 | [`API/`](../API/) | Express REST API + Solidity `*Storage` contracts |
 | [`connection/`](../connection/) | Kafka, Debezium, CDC consumer |
-| [`target/`](../target/) | Source application placeholder (populated later) |
-| [`frontend/file_manager/`](../frontend/file_manager/) | Separate file-storage demo (direct Besu + IPFS, not CDC) |
+| [`target/`](../target/) | LamTeknik NestJS source app + MySQL (CDC source) |
+| [`frontend/file_manager/`](../frontend/file_manager/) | Direct Besu + IPFS file demo (not CDC) |
+| [`frontend/lamteknik-web/`](../frontend/lamteknik-web/) | LamTeknik SaaS UI → `target/backend` API |
 | [`context/`](../context/) | Project context and progress tracking |
 
 ## Developer flow
@@ -76,7 +79,7 @@ The on-chain CDC envelope (all entities):
 3. Start Kafka + Debezium (`connection/kafka-debezium/`).
 4. Configure and register a Debezium connector for the source DB (`connection/consumer-lamteknik/`).
 5. Run the CDC consumer — changes in the source DB appear on-chain (and in IPFS for file fields).
-6. Wire up the target application in `target/` when ready.
+6. Start target stack (`target/docker-compose.yml`) and LamTeknik web UI (`frontend/lamteknik-web/`).
 
 ## Features
 
@@ -89,10 +92,10 @@ The on-chain CDC envelope (all entities):
 - `consumer-lamteknik` — Kafka consumer with batch processing, dedup, idempotency, IPFS routing
 - Env-driven multi-DB connector registration (MySQL, PostgreSQL, MongoDB, SQL Server)
 - File Manager frontend demo (direct upload path, separate from CDC)
+- LamTeknik web UI (`frontend/lamteknik-web/`) + NestJS backend (`target/backend/`) with demo SQL seeds
 
 ### Planned / placeholder
 
-- Source application in `target/`
 - IPFS REST API guide (`API/command/how-to-ipfs-api.md`)
 - Production HA Kafka, dead-letter queues, outbox pattern
 
@@ -106,7 +109,6 @@ The on-chain CDC envelope (all entities):
 
 ### Out of scope (current)
 
-- Populating `target/` with a full LamTeknik source app
 - Production deployment, monitoring, and credential management
 - Replacing the File Manager's synchronous write path with CDC (they coexist as separate demos)
 

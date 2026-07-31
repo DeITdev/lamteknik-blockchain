@@ -1,0 +1,23 @@
+# REPO: frontend — Next.js.
+# Deploy: set -a; . .env.paas; set +a; docker stack deploy -c stack.yml frontend
+# INGAT: NEXT_PUBLIC_* itu BUILD-TIME — harus di-pass sebagai --build-arg saat
+# `docker build` (lihat .env.paas.example), BUKAN di environment runtime ini.
+version: "3.8"
+
+services:
+  frontend:
+    image: ${FRONTEND_IMAGE:-REGISTRY/lamtek-frontend}
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      BACKEND_INTERNAL_URL: ${BACKEND_INTERNAL_URL:-http://backend:3000}
+    ports:
+      - "3002:3002"
+    networks:
+      - lamtek-net
+    deploy:
+      replicas: 1
+      restart_policy: { condition: any }
+
+networks:
+  lamtek-net:
+    external: true

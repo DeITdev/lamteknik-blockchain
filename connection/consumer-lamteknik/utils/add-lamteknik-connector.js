@@ -37,7 +37,7 @@ const SHARED_TRANSFORMS = {
   "transforms.unwrap.type": "io.debezium.transforms.ExtractNewRecordState",
   "transforms.unwrap.drop.tombstones": "false",
   "transforms.unwrap.delete.handling.mode": "rewrite",
-  "snapshot.mode": "when_needed",
+  "snapshot.mode": "never",
   "snapshot.locking.mode": "none",
   "decimal.handling.mode": "string",
   "time.precision.mode": "adaptive_time_microseconds",

@@ -54,3 +54,13 @@ connection/consumer-lamteknik/.env.local
 connection/consumer-lamteknik/node_modules/
 connection/consumer-lamteknik/utils/config/lamteknik-connector.json
 connection/consumer-lamteknik/config/table-mapping.json
+
+# target application
+target/.env
+target/backend/node_modules/
+target/backend/dist/
+
+# lamteknik web frontend
+frontend/lamteknik-web/node_modules/
+frontend/lamteknik-web/.next/
+frontend/lamteknik-web/.env.local
