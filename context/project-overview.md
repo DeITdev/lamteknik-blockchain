@@ -1,4 +1,4 @@
-# LamTeknik Blockchain — Project Overview
+# LamTeknik Blockchain Project Overview
 
 ## Purpose
 

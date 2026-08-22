@@ -1,4 +1,4 @@
-# Run All — LamTeknik CDC Stack
+# Run All LamTeknik CDC Stack
 
 Developer guide for bringing up the **full system on a new machine or server**. Each layer has its own Docker Compose (or `npm` process). Start them in the order below.
 

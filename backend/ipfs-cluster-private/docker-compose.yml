@@ -14,15 +14,15 @@ services:
     environment:
       <<: *ipfs-private-env
       PRIVATE_BOOTSTRAP_PEERS: >-
-        /dns4/ipfs1/tcp/4001/p2p/12D3KooWDrAVhDt3YmY2ixyXnytU6G3UjnUcaemKdf6BPqDXtnkr
-        /dns4/ipfs2/tcp/4001/p2p/12D3KooWPoCHwcdJqMZdFAtRH2r9ScPkuE5NxVo57EMV6eb2hxpk
-        /dns4/ipfs3/tcp/4001/p2p/12D3KooWBY6oUxXr3Nrcs3EugCyfLuUdwEAJrUECjBkLAaxeaiNn
+        /dns4/ipfs1/tcp/4001/p2p/12D3KooWBNq83RP9PD431BuR7WRk1rE4kMS93t3122Tgpc1PJFfH
+        /dns4/ipfs2/tcp/4001/p2p/12D3KooWNpr6j1mwFGcNfCc9VootShz6ZehF7x2LZeWWrYWmY5HD
+        /dns4/ipfs3/tcp/4001/p2p/12D3KooWD4zzNwWdpddnXaELUFnJq8zeZuHL33dX8Y83mwSyptSL
     ports:
       - "127.0.0.1:5001:5001" # ipfs api / webui
       - "127.0.0.1:8080:8080" # ipfs gateway
     volumes:
       - ./compose/ipfs0:/data/ipfs
-      - ./swarm.key:/data/ipfs/swarm.key:ro
+      - ./swarm.key:/data/ipfs/swarm.key
       - ./scripts/010-private-network.sh:/container-init.d/010-private-network.sh:ro
       - ./scripts/020-import-webui.sh:/container-init.d/020-import-webui.sh:ro
       - ./assets/webui-v4.12.0.car:/assets/webui-v4.12.0.car:ro
@@ -56,12 +56,12 @@ services:
     environment:
       <<: *ipfs-private-env
       PRIVATE_BOOTSTRAP_PEERS: >-
-        /dns4/ipfs0/tcp/4001/p2p/12D3KooWSSy7KoEW3Xa8WakzhXnfFxfBhrrxXwjfgog6qRHUDDZ8
-        /dns4/ipfs2/tcp/4001/p2p/12D3KooWPoCHwcdJqMZdFAtRH2r9ScPkuE5NxVo57EMV6eb2hxpk
-        /dns4/ipfs3/tcp/4001/p2p/12D3KooWBY6oUxXr3Nrcs3EugCyfLuUdwEAJrUECjBkLAaxeaiNn
+        /dns4/ipfs0/tcp/4001/p2p/12D3KooWSxCNvdj62QrT6tY4dVqsamWJkaaft93NcrSarJSYX9pX
+        /dns4/ipfs2/tcp/4001/p2p/12D3KooWNpr6j1mwFGcNfCc9VootShz6ZehF7x2LZeWWrYWmY5HD
+        /dns4/ipfs3/tcp/4001/p2p/12D3KooWD4zzNwWdpddnXaELUFnJq8zeZuHL33dX8Y83mwSyptSL
     volumes:
       - ./compose/ipfs1:/data/ipfs
-      - ./swarm.key:/data/ipfs/swarm.key:ro
+      - ./swarm.key:/data/ipfs/swarm.key
       - ./scripts/010-private-network.sh:/container-init.d/010-private-network.sh:ro
 
   cluster1:
@@ -73,7 +73,7 @@ services:
     command:
       - daemon
       - --bootstrap
-      - /dns4/cluster0/tcp/9096/p2p/12D3KooWQkijxCKUnEg6hP9ZwiBZ17AyWoZxDU8Y8seCKimvgJm6
+      - /dns4/cluster0/tcp/9096/p2p/12D3KooWFdQEnmQomKrknX3iXgXWA2fgDm3mZZ4NX8ctW8odMNdJ
     environment:
       CLUSTER_PEERNAME: cluster1
       CLUSTER_SECRET: ${CLUSTER_SECRET}
@@ -93,12 +93,12 @@ services:
     environment:
       <<: *ipfs-private-env
       PRIVATE_BOOTSTRAP_PEERS: >-
-        /dns4/ipfs0/tcp/4001/p2p/12D3KooWSSy7KoEW3Xa8WakzhXnfFxfBhrrxXwjfgog6qRHUDDZ8
-        /dns4/ipfs1/tcp/4001/p2p/12D3KooWDrAVhDt3YmY2ixyXnytU6G3UjnUcaemKdf6BPqDXtnkr
-        /dns4/ipfs3/tcp/4001/p2p/12D3KooWBY6oUxXr3Nrcs3EugCyfLuUdwEAJrUECjBkLAaxeaiNn
+        /dns4/ipfs0/tcp/4001/p2p/12D3KooWSxCNvdj62QrT6tY4dVqsamWJkaaft93NcrSarJSYX9pX
+        /dns4/ipfs1/tcp/4001/p2p/12D3KooWBNq83RP9PD431BuR7WRk1rE4kMS93t3122Tgpc1PJFfH
+        /dns4/ipfs3/tcp/4001/p2p/12D3KooWD4zzNwWdpddnXaELUFnJq8zeZuHL33dX8Y83mwSyptSL
     volumes:
       - ./compose/ipfs2:/data/ipfs
-      - ./swarm.key:/data/ipfs/swarm.key:ro
+      - ./swarm.key:/data/ipfs/swarm.key
       - ./scripts/010-private-network.sh:/container-init.d/010-private-network.sh:ro
 
   cluster2:
@@ -110,7 +110,7 @@ services:
     command:
       - daemon
       - --bootstrap
-      - /dns4/cluster0/tcp/9096/p2p/12D3KooWQkijxCKUnEg6hP9ZwiBZ17AyWoZxDU8Y8seCKimvgJm6
+      - /dns4/cluster0/tcp/9096/p2p/12D3KooWFdQEnmQomKrknX3iXgXWA2fgDm3mZZ4NX8ctW8odMNdJ
     environment:
       CLUSTER_PEERNAME: cluster2
       CLUSTER_SECRET: ${CLUSTER_SECRET}
@@ -130,12 +130,12 @@ services:
     environment:
       <<: *ipfs-private-env
       PRIVATE_BOOTSTRAP_PEERS: >-
-        /dns4/ipfs0/tcp/4001/p2p/12D3KooWSSy7KoEW3Xa8WakzhXnfFxfBhrrxXwjfgog6qRHUDDZ8
-        /dns4/ipfs1/tcp/4001/p2p/12D3KooWDrAVhDt3YmY2ixyXnytU6G3UjnUcaemKdf6BPqDXtnkr
-        /dns4/ipfs2/tcp/4001/p2p/12D3KooWPoCHwcdJqMZdFAtRH2r9ScPkuE5NxVo57EMV6eb2hxpk
+        /dns4/ipfs0/tcp/4001/p2p/12D3KooWSxCNvdj62QrT6tY4dVqsamWJkaaft93NcrSarJSYX9pX
+        /dns4/ipfs1/tcp/4001/p2p/12D3KooWBNq83RP9PD431BuR7WRk1rE4kMS93t3122Tgpc1PJFfH
+        /dns4/ipfs2/tcp/4001/p2p/12D3KooWNpr6j1mwFGcNfCc9VootShz6ZehF7x2LZeWWrYWmY5HD
     volumes:
       - ./compose/ipfs3:/data/ipfs
-      - ./swarm.key:/data/ipfs/swarm.key:ro
+      - ./swarm.key:/data/ipfs/swarm.key
       - ./scripts/010-private-network.sh:/container-init.d/010-private-network.sh:ro
 
   cluster3:
@@ -147,7 +147,7 @@ services:
     command:
       - daemon
       - --bootstrap
-      - /dns4/cluster0/tcp/9096/p2p/12D3KooWQkijxCKUnEg6hP9ZwiBZ17AyWoZxDU8Y8seCKimvgJm6
+      - /dns4/cluster0/tcp/9096/p2p/12D3KooWFdQEnmQomKrknX3iXgXWA2fgDm3mZZ4NX8ctW8odMNdJ
     environment:
       CLUSTER_PEERNAME: cluster3
       CLUSTER_SECRET: ${CLUSTER_SECRET}

@@ -17,3 +17,8 @@ ipfs bootstrap rm --all || true
 for peer in $PRIVATE_BOOTSTRAP_PEERS; do
   ipfs bootstrap add "$peer"
 done
+
+# Allow WebUI to call the RPC API (same host or via SSH tunnel)
+ipfs config --json API.HTTPHeaders.Access-Control-Allow-Origin \
+  '["http://localhost:3000", "http://127.0.0.1:5001", "https://webui.ipfs.io"]'
+ipfs config --json API.HTTPHeaders.Access-Control-Allow-Methods '["PUT", "POST", "GET"]'
