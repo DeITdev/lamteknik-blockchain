@@ -14,6 +14,7 @@ require("dotenv").config({ path: path.join(__dirname, ".env.local") });
 
 const KAFKA_BROKER = process.env.KAFKA_BROKER || "127.0.0.1:29092";
 const API_ENDPOINT = process.env.API_ENDPOINT || "http://127.0.0.1:4100";
+const API_KEY = process.env.API_KEY || "";
 const PRIVATE_KEY = process.env.PRIVATE_KEY;
 const TOPIC_PREFIX = process.env.TOPIC_PREFIX || "lamteknik";
 const TARGET_TABLES = (process.env.TARGET_TABLES || "akreditasi,user")
@@ -359,13 +360,16 @@ function transformForBlockchain(tableName, data) {
 async function sendToBlockchain(entitySlug, payload) {
   return concurrencyLimiter.execute(async () => {
     const body = { ...payload };
-    if (PRIVATE_KEY) body.privateKey = PRIVATE_KEY;
+    if (PRIVATE_KEY && !API_KEY) body.privateKey = PRIVATE_KEY;
+
+    const headers = { "Content-Type": "application/json" };
+    if (API_KEY) headers["x-api-key"] = API_KEY;
 
     try {
       const response = await axios.post(
         `${API_ENDPOINT}/lamteknik/${entitySlug}`,
         body,
-        { timeout: 60000, headers: { "Content-Type": "application/json" } },
+        { timeout: 60000, headers },
       );
 
       if (response.data.success) {

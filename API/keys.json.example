@@ -1,0 +1,22 @@
+{
+  "keys": [
+    {
+      "key": "sk-lamtek-cdc-internal",
+      "label": "CDC consumer on .42",
+      "role": "admin",
+      "allowedEntities": ["*"]
+    },
+    {
+      "key": "sk-lamtek-research-dev",
+      "label": "Researcher — dev pilot",
+      "role": "researcher",
+      "allowedEntities": ["akreditasi", "user", "prodi"]
+    },
+    {
+      "key": "sk-lamtek-admin-deploy",
+      "label": "Admin deploy + full access",
+      "role": "admin",
+      "allowedEntities": ["*"]
+    }
+  ]
+}

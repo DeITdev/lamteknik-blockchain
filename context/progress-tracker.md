@@ -4,7 +4,7 @@ Update this file after every meaningful implementation change.
 
 ## Current Phase
 
-**VM deployment planning** — production runs on `.40` (nodes), `.41` (gateway), `.42` (app + CDC). Local stack remains dev reference.
+**Simplified gateway implemented** — Express BAF on `.41` (no Kong). VM deployment pending.
 
 ## Current Goal
 
@@ -25,9 +25,12 @@ Update this file after every meaningful implementation change.
 
 - **26 `*Storage.sol` contracts** — LamTeknik entities with standard CDC envelope struct.
 - **`server-lamteknik.js`** — auto-generated REST routes at `/lamteknik/{entity}` (GET + POST).
+- **Gateway hardening (2026-09-03)** — `x-api-key` auth, `keys.json` profiles, signing queue + nonce manager, IPFS proxy, admin-only `POST /deploy/lamteknik`, optional audit log.
+- **`API/Dockerfile` + `docker-compose.yml`** — container deploy on `.41`.
+- **`API/keys.json.example`** — CDC internal, researcher, and admin key templates.
 - **Hardhat deploy script** — `npm run deploy:lamteknik`.
 - **Postman collection** — diagnostics + templated entity requests.
-- **Guides** — `how-to-smart-contract.md`, `how-to-blockchain-api.md`.
+- **Guides** — `how-to-smart-contract.md`, `how-to-blockchain-api.md`, `how-to-ipfs-api.md`.
 
 ### Frontend
 
@@ -46,32 +49,34 @@ Update this file after every meaningful implementation change.
 ### Connection / CDC (`connection/`)
 
 - **`kafka-debezium/docker-compose.yml`** — Zookeeper, Kafka (`:29092`), Debezium Connect (`:8083`), Kafka UI (`:8085`).
-- **`consumer-lamteknik/server.js`** — Kafka consumer with LamTeknik entity mapping, IPFS routing, blockchain API writes.
+- **`consumer-lamteknik/server.js`** — Kafka consumer with LamTeknik entity mapping, IPFS routing, blockchain API writes; supports `API_KEY` header for gateway auth.
 - **`consumer-lamteknik/config/table-mapping.json`** — plural overrides (`users`→`user`, `tenants`→`tenant`, etc.).
 - **`consumer-lamteknik/.env.local`** — points at target MySQL `:3307` / `lamtek_db`.
 - **`add-lamteknik-connector.js`** — `snapshot.mode=never` (future changes only).
 - **Command docs** — `run-kafka-debezium.md`, `configure-cdc.md`, `run-kafka-consumer.md`.
 
-### Context
+### Context / VM plans
 
-- **`context/project-overview.md`** — updated with `lamteknik-web` in frontend map.
-- **`context/progress-tracker.md`** — this file.
+- **`context/infrastructure.md`** — updated: Kong removed; `.41` = single gateway container.
+- **`context/revamp-system-plan.md`** — updated: Express BAF, research-backed decisions, Besu-only.
+- **`context/vm-41-gateway-plan.md`** — rewritten: single-container runbook, SSH key admin.
+- **`context/vm-40-node-vault-plan.md`** — admin ops reference updated (no gateway `/admin/*` routes).
 
 ---
 
 ## In Progress
 
-- Full-stack verification (Besu + IPFS + API + target + Kafka + consumer + frontend) — run locally per `target/command/run-target.md`.
+- VM deployment (`.40` → `.41` → `.42`) — gateway code ready; execute runbooks on VMs.
 
 ---
 
 ## Next Up
 
 1. **VM `.40`** — Besu + IPFS + ufw per [vm-40-node-vault-plan.md](./vm-40-node-vault-plan.md).
-2. **VM `.41`** — Gateway + Kong per [vm-41-gateway-plan.md](./vm-41-gateway-plan.md).
+2. **VM `.41`** — `docker compose up` with `keys.json` + `.env` per [vm-41-gateway-plan.md](./vm-41-gateway-plan.md).
 3. **VM `.42`** — App + CDC stack (revamp Phase 3).
 4. **End-to-end CDC smoke test** — update an `akreditasi` row on `.42`, confirm on-chain via gateway.
-5. **IPFS API guide** — `API/command/how-to-ipfs-api.md`.
+5. **Local dev with auth** — copy `keys.json.example` → `keys.json`, set `API_KEY_REQUIRED=true` to test.
 
 ---
 
@@ -90,6 +95,7 @@ Update this file after every meaningful implementation change.
 - **Reference pattern** — CDC consumer follows `repo/blockchain-erp-integration/consumer-erp/`.
 - **Env-driven DB switching** — `CDC_DB_TYPE` selects Debezium connector class.
 - **File Manager stays separate** — coexists with `lamteknik-web`; no merge.
+- **Gateway (2026-09-03)** — Custom Express BAF; Kong rejected; custodial signing + signing queue; Fabric deferred.
 
 ---
 
@@ -98,3 +104,4 @@ Update this file after every meaningful implementation change.
 - LamTeknik source migrated from `repo/Blockchain_lamtek/` 2026-06-29 (copy only, repo unchanged).
 - Target MySQL uses host port **3307** to avoid local MySQL conflicts.
 - Demo login from SQL seed: `admin@lamtek.test` / `Test1234!`.
+- 2026-09-03: Simplified gateway plan implemented — auth, signing queue, IPFS proxy, Docker, context docs updated.

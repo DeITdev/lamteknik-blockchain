@@ -217,7 +217,7 @@ These are **ops-only** — not researcher-facing.
 | Besu block | `curl` `eth_blockNumber` on `:8545` |
 | Prometheus (optional) | Enable IPFS Cluster metrics on `:8888`; scrape from ops VM |
 
-Gateway on `.41` will expose aggregated `/admin/*` ops routes that proxy these checks — see [vm-41-gateway-plan.md](./vm-41-gateway-plan.md).
+Gateway on `.41` exposes `/health` for ops checks — see [vm-41-gateway-plan.md](./vm-41-gateway-plan.md). Node management stays SSH-only.
 
 ---
 

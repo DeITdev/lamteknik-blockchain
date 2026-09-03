@@ -13,11 +13,12 @@ Target deployment layout: **blockchain + IPFS on server `.40`**, **API gateway o
 | Principle | Meaning |
 |-----------|---------|
 | **Vault vs front door** | VM `.40` runs nodes only. Users never get raw Besu/IPFS ports. |
-| **Bifrost-like access** | Researchers use one HTTPS base URL + `x-api-key` on the gateway (`.41`). |
+| **Express BAF gateway** | Researchers use one base URL + `x-api-key` on the LamTeknik Gateway (`.41`). Application-level access control — not raw JSON-RPC. |
 | **CDC with app** | Kafka, Debezium, and `consumer-lamteknik` always live on the **same machine as MySQL** — server `.42`. |
-| **Gateway on `.41` only** | Server `.41` runs gateway + Kong admin — not the LamTeknik app stack. |
+| **Gateway on `.41` only** | Server `.41` runs the LamTeknik Gateway container only — not the LamTeknik app stack, not Kong. |
 | **VM-only deployment** | Implement Besu, IPFS, gateway, and CDC on VMs — local stack is dev reference only. |
-| **No FireFly** | Hyperledger FireFly was evaluated and dropped (poor fit for Bifrost UX + CDC + unified IPFS). |
+| **SSH for ops** | Node management, key CRUD, ufw, and pin recovery via SSH — no public admin UI. |
+| **No FireFly / No Kong** | FireFly dropped (poor CDC fit). Kong dropped (overkill for Besu-only entity REST). |
 
 ---
 
@@ -28,7 +29,7 @@ Target deployment layout: **blockchain + IPFS on server `.40`**, **API gateway o
 | Host | IP / location | Role | Public internet |
 |------|---------------|------|-----------------|
 | **Node vault** | `10.9.23.40` | Besu IBFT + IPFS Cluster | **No** — ufw allows trusted IPs only |
-| **Gateway** | `10.9.23.41` | LamTeknik Gateway + Kong + HTTPS | Gateway port reachable from researcher network |
+| **Gateway** | `10.9.23.41` | LamTeknik Gateway (Express BAF) | Gateway `:4100` (or `:443` via optional Caddy) |
 | **App + CDC** | `10.9.23.42` | MySQL, NestJS, lamteknik-web, Kafka, Debezium, consumer | Private network only |
 
 ```mermaid
@@ -39,9 +40,7 @@ flowchart TB
   end
 
   subgraph vm41 ["Server .41 — 10.9.23.41 — gateway"]
-    Kong[Kong + Caddy :443]
     GW[LamTeknik Gateway :4100]
-    Kong --> GW
   end
 
   subgraph vm42 ["Server .42 — 10.9.23.42 — app + CDC"]
@@ -56,8 +55,8 @@ flowchart TB
     Researcher[Researchers — x-api-key]
   end
 
-  Researcher --> Kong
-  Consumer -->|"POST /lamteknik/*"| GW
+  Researcher --> GW
+  Consumer -->|"POST /lamteknik/* + x-api-key"| GW
   Consumer -->|"file columns"| IPFS
   Nest --> MySQL
   MySQL --> Kafka --> Consumer
@@ -103,10 +102,10 @@ Smart contracts (`API/contracts/*Storage.sol`) deploy to Besu on `.40`. The gate
 
 | Port | Service | Notes |
 |------|---------|-------|
-| 4100 | LamTeknik Gateway | Blockchain REST + IPFS proxy; CDC calls this internally |
-| 443 / 80 | HTTPS reverse proxy | Public entry for researchers *(nginx/Caddy in front of gateway)* |
-| 8000–8002 | Kong *(optional)* | Proxy + Kong Manager OSS for API key admin |
-| 8001 | Kong Manager GUI | Admin dashboard for `x-api-key` profiles |
+| 4100 | LamTeknik Gateway | Blockchain REST + IPFS proxy; CDC and researchers call this |
+| 443 / 80 | HTTPS reverse proxy *(optional)* | Caddy/nginx → `:4100` direct — no Kong layer |
+
+Key management: edit [`API/keys.json`](../API/keys.json) via SSH, restart gateway container.
 
 ### Local machine — dev reference only
 
@@ -131,13 +130,13 @@ Local Docker stack remains for development. Production CDC and gateway run on VM
 | IPFS gateway | `http://10.9.23.40:8080` | NestJS file reads *(optional)* |
 | IPFS proxy | `http://10.9.23.40:9095` | NestJS uploads *(optional)* |
 
-NestJS should **not** call Besu `:8545` directly from local unless `.40` ufw allows your PC IP — prefer gateway for chain reads/writes from app code later.
+NestJS should **not** call Besu `:8545` directly unless `.40` ufw allows the caller — prefer gateway for chain reads/writes from app code.
 
 ## Network and firewall
 
 ### VM `.40` — node vault
 
-**Default:** deny all incoming. Allow gateway, and **your local machine IP** (for CDC IPFS uploads).
+**Default:** deny all incoming. Allow gateway and app VM.
 
 ```bash
 sudo ufw default deny incoming
@@ -159,17 +158,19 @@ sudo ufw allow from 10.9.23.42 to any port 9095
 sudo ufw enable
 ```
 
-Find your IP from the server: check Debezium/consumer connection logs, or run `curl ifconfig.me` from PC if on VPN with stable IP.
-
 **Do not** open `.40` to `0.0.0.0/0` without ufw.
 
 ### VM `.41` — gateway
 
-Allow inbound `:4100` (and `:443` when HTTPS added) from:
-
-- Your local machine IP (CDC consumer)
-- Researcher network / campus VPN
-- Optionally restrict admin UI ports to admin IP only
+```bash
+sudo ufw default deny incoming
+sudo ufw default allow outgoing
+sudo ufw allow from 10.9.23.0/24 to any port 22
+sudo ufw allow from 10.9.23.42 to any port 4100   # CDC
+sudo ufw allow from <RESEARCHER_NETWORK> to any port 4100
+# Optional: sudo ufw allow 443/tcp
+sudo ufw enable
+```
 
 Gateway talks **outbound** to `.40` — ensure `.40` ufw allows `.41` as above.
 
@@ -177,24 +178,26 @@ Gateway talks **outbound** to `.40` — ensure `.40` ufw allows `.41` as above.
 
 ## Traffic flows
 
-### Researchers / external API users (Bifrost-like)
+### Researchers / external API users
 
 ```
-HTTPS + x-api-key  →  Gateway .41  →  Besu .40:8545  (contract reads/writes)
-                     →  IPFS .40:9094 / :8080  (upload / download via proxy)
+x-api-key  →  Gateway .41:4100  →  Besu .40:8545  (contract reads/writes)
+                                →  IPFS .40:9094 / :8080  (upload / download via proxy)
 ```
 
 Example profile handed to a user:
 
 ```
-Base URL:   https://lamtek.example/v1
+Base URL:   http://10.9.23.41:4100
 API key:    sk-lamtek-research-xxxx
+Entities:   akreditasi, user, prodi, …
 
-Blockchain entities: akreditasi, user, prodi, … (26 slugs)
-IPFS:       POST /v1/ipfs/upload   GET /v1/ipfs/{cid}
+Read:   GET  /lamteknik/akreditasi/count
+Write:  POST /lamteknik/akreditasi
+IPFS:   POST /ipfs/upload   GET /ipfs/{cid}
 ```
 
-Researchers **never** receive `10.9.23.40` or raw node ports.
+Researchers **never** receive `10.9.23.40` or raw node ports. No raw JSON-RPC passthrough on the gateway.
 
 ### CDC pipeline (VM `.42` → servers)
 
@@ -206,7 +209,7 @@ MySQL (.42 :3307)
                             → Besu       http://10.9.23.40:8545
 ```
 
-Requires: `.42` can reach `.41:4100` and `.40:9094` (firewall + routing).
+Consumer sends `x-api-key` with internal admin key. Gateway signs with `DEPLOYER_PRIVATE_KEY`.
 
 ### LamTeknik web app (VM `.42`)
 
@@ -216,7 +219,7 @@ NestJS → IPFS on .40 for dokumen uploads (9095 or 9094)
 NestJS → gateway on .41 for chain ops (recommended)
 ```
 
-### Operations / monitoring
+### Operations / monitoring (SSH only)
 
 | Tool | Access |
 |------|--------|
@@ -224,8 +227,7 @@ NestJS → gateway on .41 for chain ops (recommended)
 | Chainlens `:8081` | Restrict to admin network or SSH tunnel |
 | Kafka UI `:8085` | App VM localhost or admin VPN |
 | Gateway health | `GET http://10.9.23.41:4100/health` |
-
-WebUIs are **not** required for integrations — APIs only.
+| API key admin | SSH to `.41` → edit `keys.json` → `docker compose restart` |
 
 ---
 
@@ -241,13 +243,16 @@ DEPLOYER_PRIVATE_KEY=<server signer — not shared with researchers>
 IPFS_CLUSTER_REST_URL=http://10.9.23.40:9094
 IPFS_GATEWAY_URL=http://10.9.23.40:8080
 CORS_ORIGIN=*
-# Future: API_KEYS_FILE or admin-managed key store
+API_KEY_REQUIRED=true
+API_KEYS_FILE=/app/keys.json
+AUDIT_LOG_ENABLED=false
 ```
 
 ### Consumer on VM `.42` — [`connection/consumer-lamteknik/.env`](../connection/consumer-lamteknik/.env.example)
 
 ```env
 API_ENDPOINT=http://10.9.23.41:4100
+API_KEY=sk-lamtek-cdc-internal
 IPFS_CLUSTER_REST_URL=http://10.9.23.40:9094
 KAFKA_BROKER=127.0.0.1:29092
 KAFKA_CONNECT_URL=http://127.0.0.1:8083
@@ -257,17 +262,11 @@ DB_PORT=3307
 
 ### NestJS on VM `.42` — [`target/docker-compose.yml`](../target/docker-compose.yml)
 
-Use `host.docker.internal` or your host LAN IP to reach servers from Docker:
-
 ```env
-BESU_RPC_URL=http://10.9.23.41:4100/lamteknik   # via gateway (future)
-# Or direct if ufw allows your IP:
-BESU_RPC_URL=http://10.9.23.40:8545
+BESU_RPC_URL=http://10.9.23.41:4100/lamteknik   # via gateway (recommended)
 IPFS_API_URL=http://10.9.23.40:9095
 IPFS_GATEWAY_URL=http://10.9.23.40:8080
 ```
-
-On Linux Docker, add `extra_hosts: ["host.docker.internal:host-gateway"]` if using host networking tricks.
 
 ---
 
@@ -275,13 +274,16 @@ On Linux Docker, add `extra_hosts: ["host.docker.internal:host-gateway"]` if usi
 
 | Actor | Auth | Reaches |
 |-------|------|---------|
-| Researcher | `x-api-key` via gateway | `/v1/lamteknik/*`, `/v1/ipfs/*` on `.41` only |
-| CDC consumer | Internal `x-api-key` on private network | Gateway `.41:4100`, IPFS `.40:9094` |
-| NestJS app | JWT for app users; infra uses env URLs | MySQL local; Besu/IPFS on `.40` |
-| Admin | SSH + gateway/Kong admin UI | Key creation, connector config, node ops |
+| Researcher | `x-api-key` via gateway | `/lamteknik/*`, `/ipfs/*` on `.41` only; entity scope via `allowedEntities` |
+| CDC consumer | Internal admin `x-api-key` | Gateway `.41:4100`, IPFS `.40:9094` direct |
+| Admin (deploy) | Admin `x-api-key` (`role: admin`) | Same as researcher + `POST /deploy/lamteknik` |
+| NestJS app | JWT for app users; infra uses env URLs | MySQL local; Besu/IPFS via gateway or `.40` |
+| Node ops | SSH only | Besu/IPFS/Kafka restarts, ufw, `keys.json` edits |
 | Public internet | Blocked from `.40` | ufw on node vault |
 
-**Signing:** Gateway holds `DEPLOYER_PRIVATE_KEY` for automated CDC and default writes. Per-researcher keys gate *access*; optional future mapping to dedicated Besu keys per profile.
+**Signing:** Gateway holds `DEPLOYER_PRIVATE_KEY`. Signing queue serializes concurrent writes (CDC + researchers). Researchers never supply Besu private keys in POST bodies.
+
+**Future Fabric:** add `"backend": "fabric"` per key in `keys.json` when a Fabric network exists — not implemented now.
 
 ---
 
@@ -289,10 +291,12 @@ On Linux Docker, add `extra_hosts: ["host.docker.internal:host-gateway"]` if usi
 
 | Option | Reason |
 |--------|--------|
-| **Hyperledger FireFly** | No Bifrost-like admin UI; IPFS not available in gateway mode; CDC route rewrite; high ops cost |
+| **Hyperledger FireFly** | No Bifrost-like admin UI; IPFS not in gateway mode; CDC route rewrite; high ops cost |
+| **Kong OSS** | Overkill for Besu-only entity REST; Express handles `x-api-key` directly |
 | **Expose Besu/IPFS to internet** | Unauthenticated RPC and cluster REST are unsafe |
-| **CDC on gateway VM separate from MySQL** | Cross-VM binlog / Debezium complexity; CDC must follow app |
-| **Raw node access for researchers** | Bypasses key revocation, rate limits, and audit |
+| **Raw JSON-RPC passthrough** | No entity-level access control; security best practice is app-layer REST |
+| **CDC on gateway VM separate from MySQL** | Cross-VM binlog complexity; CDC must follow app |
+| **Public admin/ops routes on gateway** | Node management stays SSH-only |
 
 ---
 
@@ -302,7 +306,7 @@ On Linux Docker, add `extra_hosts: ["host.docker.internal:host-gateway"]` if usi
 |-------|------|-----------|
 | 1 | Server `.40` | Besu IBFT + IPFS Cluster (+ ufw + IPFS port bind fix) — [vm-40 plan](./vm-40-node-vault-plan.md) |
 | 2 | Server `.40` or `.41` | Deploy contracts (`API/` Hardhat) if not yet deployed |
-| 3 | Server `.41` | LamTeknik Gateway + Kong + HTTPS — [vm-41 plan](./vm-41-gateway-plan.md) |
+| 3 | Server `.41` | LamTeknik Gateway container — [vm-41 plan](./vm-41-gateway-plan.md) |
 | 4 | Server `.42` | MySQL + NestJS (`target/docker compose up`) |
 | 5 | Server `.42` | Kafka + Debezium (`connection/kafka-debezium/`) |
 | 6 | Server `.42` | Register Debezium connector + start consumer |
