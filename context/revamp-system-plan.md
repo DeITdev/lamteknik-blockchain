@@ -6,7 +6,12 @@ Step-by-step plan to deploy the multi-VM layout described in [infrastructure.md]
 
 **Last updated:** 2026-09-03
 
-**Goal:** Servers `.40` (nodes) + `.41` (gateway); **app + CDC on your local machine** for now. Bifrost-like gateway access without FireFly.
+**Goal:** All production work runs **on VMs** — not local Docker. Servers `.40` (nodes), `.41` (gateway), `.42` (app + CDC). Bifrost-like gateway access without FireFly.
+
+**VM runbooks (execute in order):**
+
+- [vm-40-node-vault-plan.md](./vm-40-node-vault-plan.md) — Besu + IPFS on `10.9.23.40`
+- [vm-41-gateway-plan.md](./vm-41-gateway-plan.md) — Gateway + Kong on `10.9.23.41`
 
 ---
 
@@ -14,11 +19,11 @@ Step-by-step plan to deploy the multi-VM layout described in [infrastructure.md]
 
 When complete:
 
-1. Server `.40` runs Besu + IPFS only, firewalled to `.41` + your local PC IP.
-2. Server `.41` runs the **LamTeknik Gateway** (containerized `API/`) with optional Kong admin UI.
-3. **Local machine** runs LamTeknik app + **Kafka + Debezium + consumer** + MySQL.
+1. Server `.40` runs Besu + IPFS only, firewalled to `.41` + `.42`.
+2. Server `.41` runs the **LamTeknik Gateway** (containerized `API/`) + **Kong Manager** for API keys.
+3. Server `.42` runs LamTeknik app + **Kafka + Debezium + consumer** + MySQL.
 4. Researchers use `https://<gateway>/v1` + `x-api-key` on `.41`.
-5. CDC: local MySQL → local Kafka → local consumer → gateway `.41` → Besu `.40`; files → IPFS `.40` direct.
+5. CDC: `.42` MySQL → Kafka → consumer → gateway `.41` → Besu `.40`; files → IPFS `.40` direct.
 
 ---
 
@@ -26,28 +31,35 @@ When complete:
 
 ```mermaid
 flowchart LR
-  subgraph now [Now — hybrid]
-    direction TB
-    S40[Server .40 nodes]
-    S41[Server .41 gateway]
-    Local[Local PC app + CDC]
+  subgraph vm40 [Server .40]
+    Besu[Besu IBFT]
+    IPFS[IPFS Cluster]
   end
 
-  subgraph later [Later — scale]
-    direction TB
-    S40b[Server .40 nodes]
-    S41b[Server .41 gateway]
-    S42[Server app + CDC]
+  subgraph vm41 [Server .41]
+    Kong[Kong + HTTPS]
+    GW[LamTeknik Gateway]
+    Kong --> GW
   end
 
-  now --> later
+  subgraph vm42 [Server .42]
+    App[NestJS + MySQL]
+    CDC[Kafka + Debezium + consumer]
+  end
+
+  Researchers[Researchers] --> Kong
+  CDC --> GW
+  CDC --> IPFS
+  GW --> Besu
+  GW --> IPFS
+  App --> App
 ```
 
 | Host | Runs |
 |------|------|
-| `10.9.23.40` | Besu + IPFS |
-| `10.9.23.41` | LamTeknik Gateway + admin |
-| **Your PC** | MySQL, NestJS, web, Kafka, Debezium, consumer |
+| `10.9.23.40` | Besu + IPFS — [vm-40-node-vault-plan.md](./vm-40-node-vault-plan.md) |
+| `10.9.23.41` | LamTeknik Gateway + Kong — [vm-41-gateway-plan.md](./vm-41-gateway-plan.md) |
+| `10.9.23.42` | MySQL, NestJS, web, Kafka, Debezium, consumer |
 
 ---
 
@@ -211,11 +223,11 @@ Researchers get **access keys**, not Besu private keys. Optional future: map res
 
 | Item | Action |
 |------|--------|
-| Servers | `.40` and `.41` provisioned; reachable from your PC (LAN/VPN) |
-| Local PC | Docker + Node.js for app, CDC, and optional contract deploy |
-| Git | Clone repo on servers and local PC |
+| Servers | `.40`, `.41`, and `.42` provisioned; reachable from admin network (LAN/VPN) |
+| VM-only | Implement on VMs — do not rely on local Docker for production stack |
+| Git | Clone repo on each VM |
 | Secrets | `swarm.key`, `CLUSTER_SECRET` on `.40`; gateway `.env` on `.41` |
-| Network | Add your PC IP to `.40` ufw; test reachability to `.41:4100` and `.40:9094` |
+| Network | Add `.41` + `.42` IPs to `.40` ufw; test reachability before gateway go-live |
 
 **Docs to read:**
 
@@ -227,6 +239,8 @@ Researchers get **access keys**, not Besu private keys. Optional future: map res
 ---
 
 ## Phase 1 — Node vault (VM `.40`)
+
+> **Full runbook:** [vm-40-node-vault-plan.md](./vm-40-node-vault-plan.md)
 
 ### 1.1 Start Besu IBFT
 
@@ -290,6 +304,8 @@ Copy `API/build/contracts/lamteknik/` to server `.41` for the gateway container,
 ---
 
 ## Phase 2 — LamTeknik Gateway (VM `.41`)
+
+> **Full runbook:** [vm-41-gateway-plan.md](./vm-41-gateway-plan.md)
 
 Extend [`API/server-lamteknik.js`](../API/server-lamteknik.js) into a Bifrost-like gateway. See **Blockchain API Gateway** section above for full stack and library rationale.
 
@@ -367,9 +383,9 @@ curl -H "x-api-key: sk-test" \
 
 ---
 
-## Phase 3 — App + CDC (local machine)
+## Phase 3 — App + CDC (VM `.42`)
 
-All steps run on **your PC**, not on server `.41`.
+All steps run on **server `.42`**, not on `.40` or `.41`.
 
 ### 3.1 Target application stack
 
@@ -516,6 +532,8 @@ When the local PC is no longer enough:
 |------|--------|
 | `context/infrastructure.md` | ✅ Written — VM layout reference |
 | `context/revamp-system-plan.md` | ✅ This file (updated 2026-09-03) |
+| `context/vm-40-node-vault-plan.md` | ✅ VM `.40` runbook |
+| `context/vm-41-gateway-plan.md` | ✅ VM `.41` runbook |
 | `backend/ipfs-cluster-private/docker-compose.yml` | Change port binds `9094`, `8080` |
 | `API/Dockerfile` | Create |
 | `API/docker-compose.yml` | Create |

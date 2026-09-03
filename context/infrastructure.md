@@ -1,6 +1,8 @@
 # LamTeknik Infrastructure
 
-Target deployment layout: **blockchain + IPFS on server `.40`**, **API gateway on server `.41`**, **app + CDC on your local machine** (for now). Future scale moves app + CDC to a dedicated server (e.g. `.42`).
+Target deployment layout: **blockchain + IPFS on server `.40`**, **API gateway on server `.41`**, **app + CDC on server `.42`**. All production work runs on VMs — not local Docker.
+
+**VM runbooks:** [vm-40-node-vault-plan.md](./vm-40-node-vault-plan.md) · [vm-41-gateway-plan.md](./vm-41-gateway-plan.md)
 
 **Related:** [revamp-system-plan.md](./revamp-system-plan.md) · [project-overview.md](./project-overview.md)
 
@@ -12,22 +14,22 @@ Target deployment layout: **blockchain + IPFS on server `.40`**, **API gateway o
 |-----------|---------|
 | **Vault vs front door** | VM `.40` runs nodes only. Users never get raw Besu/IPFS ports. |
 | **Bifrost-like access** | Researchers use one HTTPS base URL + `x-api-key` on the gateway (`.41`). |
-| **CDC with app** | Kafka, Debezium, and `consumer-lamteknik` always live on the **same machine as MySQL** — local dev PC now, server later. |
-| **Gateway on `.41` only** | Server `.41` runs gateway + admin — not the LamTeknik app stack. |
-| **Hybrid pilot** | Servers host chain + gateway; you develop/run app + CDC locally and call servers over LAN/VPN. |
+| **CDC with app** | Kafka, Debezium, and `consumer-lamteknik` always live on the **same machine as MySQL** — server `.42`. |
+| **Gateway on `.41` only** | Server `.41` runs gateway + Kong admin — not the LamTeknik app stack. |
+| **VM-only deployment** | Implement Besu, IPFS, gateway, and CDC on VMs — local stack is dev reference only. |
 | **No FireFly** | Hyperledger FireFly was evaluated and dropped (poor fit for Bifrost UX + CDC + unified IPFS). |
 
 ---
 
 ## Topology
 
-### Current layout — hybrid (now)
+### Production layout — 3 VMs
 
 | Host | IP / location | Role | Public internet |
 |------|---------------|------|-----------------|
 | **Node vault** | `10.9.23.40` | Besu IBFT + IPFS Cluster | **No** — ufw allows trusted IPs only |
-| **Gateway** | `10.9.23.41` | LamTeknik Gateway + admin dashboard (Kong optional) | Gateway port reachable from your network |
-| **App + CDC** | **Your local machine** | MySQL, NestJS, lamteknik-web, Kafka, Debezium, consumer | Localhost only |
+| **Gateway** | `10.9.23.41` | LamTeknik Gateway + Kong + HTTPS | Gateway port reachable from researcher network |
+| **App + CDC** | `10.9.23.42` | MySQL, NestJS, lamteknik-web, Kafka, Debezium, consumer | Private network only |
 
 ```mermaid
 flowchart TB
@@ -37,11 +39,12 @@ flowchart TB
   end
 
   subgraph vm41 ["Server .41 — 10.9.23.41 — gateway"]
-    Admin[Admin dashboard / Kong Manager]
+    Kong[Kong + Caddy :443]
     GW[LamTeknik Gateway :4100]
+    Kong --> GW
   end
 
-  subgraph local ["Local machine — app + CDC"]
+  subgraph vm42 ["Server .42 — 10.9.23.42 — app + CDC"]
     MySQL[(MySQL :3307)]
     Kafka[Kafka :29092 + Debezium :8083]
     Consumer[consumer-lamteknik]
@@ -53,8 +56,7 @@ flowchart TB
     Researcher[Researchers — x-api-key]
   end
 
-  Researcher --> Admin
-  Researcher --> GW
+  Researcher --> Kong
   Consumer -->|"POST /lamteknik/*"| GW
   Consumer -->|"file columns"| IPFS
   Nest --> MySQL
@@ -65,20 +67,10 @@ flowchart TB
   Web --> Nest
 ```
 
-### Future scale — app + CDC on server
-
-| Host | IP | Role |
-|------|-----|------|
-| **Node vault** | `10.9.23.40` | Unchanged |
-| **Gateway** | `10.9.23.41` | Unchanged |
-| **App + CDC** | `10.9.23.42` *(or similar)* | Move `target/` + `connection/` off local PC |
-
-Gateway stays on `.41`. CDC still co-located with MySQL — only the host changes.
-
 ## Repository components by host
 
-| Repo path | Server `.40` | Server `.41` | Local machine |
-|-----------|--------------|--------------|---------------|
+| Repo path | Server `.40` | Server `.41` | Server `.42` |
+|-----------|--------------|--------------|--------------|
 | [`backend/blockchain-besu-ibft/`](../backend/blockchain-besu-ibft/) | ✓ | | |
 | [`backend/ipfs-cluster-private/`](../backend/ipfs-cluster-private/) | ✓ | | |
 | [`API/`](../API/) (LamTeknik Gateway) | | ✓ | |
@@ -102,8 +94,8 @@ Smart contracts (`API/contracts/*Storage.sol`) deploy to Besu on `.40`. The gate
 | 8081 | Chainlens explorer | same | All interfaces | Ops only *(optional)* |
 | 5001 | Kubo API + WebUI | `ipfs-cluster-private` | **127.0.0.1 only** | SSH tunnel for ops |
 | 8080 | IPFS gateway | same | **Must expose to LAN** *(see revamp plan)* | `.41`, app VM |
-| 9094 | IPFS Cluster REST | same | **Must expose to LAN** | `.41`, app VM (CDC files) |
-| 9095 | Cluster IPFS proxy | same | All interfaces | App VM (NestJS `/api/v0/*`) |
+| 9094 | IPFS Cluster REST | same | **Must expose to LAN** | `.41`, `.42` (CDC files) |
+| 9095 | Cluster IPFS proxy | same | All interfaces | `.42` (NestJS `/api/v0/*`) |
 | 9096 | Cluster swarm | same | All interfaces | Cluster peers only |
 | 4001 | Kubo swarm | same | Not on host | Internal Docker network |
 
@@ -116,7 +108,9 @@ Smart contracts (`API/contracts/*Storage.sol`) deploy to Besu on `.40`. The gate
 | 8000–8002 | Kong *(optional)* | Proxy + Kong Manager OSS for API key admin |
 | 8001 | Kong Manager GUI | Admin dashboard for `x-api-key` profiles |
 
-### Local machine — app + CDC
+### Local machine — dev reference only
+
+Local Docker stack remains for development. Production CDC and gateway run on VMs `.40`–`.42`.
 
 | Port | Service | Notes |
 |------|---------|-------|
@@ -128,7 +122,7 @@ Smart contracts (`API/contracts/*Storage.sol`) deploy to Besu on `.40`. The gate
 | 8083 | Debezium Connect REST | Connector registration |
 | 8085 | Kafka UI | Debugging |
 
-**Outbound (local → servers):**
+**Outbound (`.42` → servers):**
 
 | Target | URL | Used by |
 |--------|-----|---------|
@@ -157,14 +151,10 @@ sudo ufw allow from 10.9.23.41 to any port 8545
 sudo ufw allow from 10.9.23.41 to any port 9094
 sudo ufw allow from 10.9.23.41 to any port 8080
 
-# Local dev machine — replace with your PC's LAN/VPN IP
-sudo ufw allow from <YOUR_LOCAL_IP> to any port 9094
-sudo ufw allow from <YOUR_LOCAL_IP> to any port 8080
-sudo ufw allow from <YOUR_LOCAL_IP> to any port 9095
-
-# Future app server
+# App + CDC VM
 sudo ufw allow from 10.9.23.42 to any port 9094
 sudo ufw allow from 10.9.23.42 to any port 8080
+sudo ufw allow from 10.9.23.42 to any port 9095
 
 sudo ufw enable
 ```
@@ -206,24 +196,24 @@ IPFS:       POST /v1/ipfs/upload   GET /v1/ipfs/{cid}
 
 Researchers **never** receive `10.9.23.40` or raw node ports.
 
-### CDC pipeline (local app + CDC → servers)
+### CDC pipeline (VM `.42` → servers)
 
 ```
-MySQL (local :3307)
-  → Debezium (local) → Kafka (local) → consumer (local)
+MySQL (.42 :3307)
+  → Debezium (.42) → Kafka (.42) → consumer (.42)
        → file columns: IPFS Cluster  http://10.9.23.40:9094/add
        → entity rows:  Gateway         http://10.9.23.41:4100/lamteknik/{entity}
                             → Besu       http://10.9.23.40:8545
 ```
 
-Requires: local PC can reach `.41:4100` and `.40:9094` (firewall + routing/VPN).
+Requires: `.42` can reach `.41:4100` and `.40:9094` (firewall + routing).
 
-### LamTeknik web app (local)
+### LamTeknik web app (VM `.42`)
 
 ```
-lamteknik-web (local :3002) → NestJS (local :3001) → MySQL (local)
+lamteknik-web (.42 :3002) → NestJS (.42 :3001) → MySQL (.42)
 NestJS → IPFS on .40 for dokumen uploads (9095 or 9094)
-NestJS → gateway on .41 for chain ops (recommended) OR direct Besu if ufw allows
+NestJS → gateway on .41 for chain ops (recommended)
 ```
 
 ### Operations / monitoring
@@ -254,7 +244,7 @@ CORS_ORIGIN=*
 # Future: API_KEYS_FILE or admin-managed key store
 ```
 
-### Consumer on local machine — [`connection/consumer-lamteknik/.env`](../connection/consumer-lamteknik/.env.example)
+### Consumer on VM `.42` — [`connection/consumer-lamteknik/.env`](../connection/consumer-lamteknik/.env.example)
 
 ```env
 API_ENDPOINT=http://10.9.23.41:4100
@@ -265,7 +255,7 @@ DB_HOST=127.0.0.1
 DB_PORT=3307
 ```
 
-### NestJS on local machine — [`target/docker-compose.yml`](../target/docker-compose.yml)
+### NestJS on VM `.42` — [`target/docker-compose.yml`](../target/docker-compose.yml)
 
 Use `host.docker.internal` or your host LAN IP to reach servers from Docker:
 
@@ -286,7 +276,7 @@ On Linux Docker, add `extra_hosts: ["host.docker.internal:host-gateway"]` if usi
 | Actor | Auth | Reaches |
 |-------|------|---------|
 | Researcher | `x-api-key` via gateway | `/v1/lamteknik/*`, `/v1/ipfs/*` on `.41` only |
-| CDC consumer | None *(trust: your PC on private network)* | Gateway `.41:4100`, IPFS `.40:9094` |
+| CDC consumer | Internal `x-api-key` on private network | Gateway `.41:4100`, IPFS `.40:9094` |
 | NestJS app | JWT for app users; infra uses env URLs | MySQL local; Besu/IPFS on `.40` |
 | Admin | SSH + gateway/Kong admin UI | Key creation, connector config, node ops |
 | Public internet | Blocked from `.40` | ufw on node vault |
@@ -306,28 +296,25 @@ On Linux Docker, add `extra_hosts: ["host.docker.internal:host-gateway"]` if usi
 
 ---
 
-## Startup order (hybrid layout)
+## Startup order (3-VM layout)
 
 | Order | Host | Component |
 |-------|------|-----------|
-| 1 | Server `.40` | Besu IBFT + IPFS Cluster (+ ufw + IPFS port bind fix) |
-| 2 | Server `.40` | Deploy contracts (`API/` Hardhat) if not yet deployed |
-| 3 | Server `.41` | LamTeknik Gateway container |
-| 4 | **Local** | MySQL + NestJS (`target/docker compose up`) |
-| 5 | **Local** | Kafka + Debezium (`connection/kafka-debezium/`) |
-| 6 | **Local** | Register Debezium connector + start consumer |
-| 7 | **Local** | lamteknik-web frontend |
-| 8 | Server `.41` | *(Optional)* Kong + HTTPS |
+| 1 | Server `.40` | Besu IBFT + IPFS Cluster (+ ufw + IPFS port bind fix) — [vm-40 plan](./vm-40-node-vault-plan.md) |
+| 2 | Server `.40` or `.41` | Deploy contracts (`API/` Hardhat) if not yet deployed |
+| 3 | Server `.41` | LamTeknik Gateway + Kong + HTTPS — [vm-41 plan](./vm-41-gateway-plan.md) |
+| 4 | Server `.42` | MySQL + NestJS (`target/docker compose up`) |
+| 5 | Server `.42` | Kafka + Debezium (`connection/kafka-debezium/`) |
+| 6 | Server `.42` | Register Debezium connector + start consumer |
+| 7 | Server `.42` | lamteknik-web frontend |
+| 8 | All | Integration tests (Phase 4 in revamp plan) |
 
 ---
 
-## Future scale checklist (local → server `.42`)
+## VM plan index
 
-1. Provision app server; install Docker.
-2. Move `target/` + `connection/` stacks from local PC to server.
-3. Add new server IP to `.40` ufw; remove local PC IP if no longer needed.
-4. Consumer `API_ENDPOINT` stays `http://10.9.23.41:4100`.
-5. Re-register Debezium connector (MySQL now on server, still local to Debezium).
-6. Gateway on `.41` unchanged.
-
-Gateway VM does **not** run Kafka or MySQL.
+| VM | IP | Runbook |
+|----|-----|---------|
+| Node vault | `10.9.23.40` | [vm-40-node-vault-plan.md](./vm-40-node-vault-plan.md) |
+| Gateway | `10.9.23.41` | [vm-41-gateway-plan.md](./vm-41-gateway-plan.md) |
+| App + CDC | `10.9.23.42` | Phase 3 in [revamp-system-plan.md](./revamp-system-plan.md) *(dedicated runbook TBD)* |

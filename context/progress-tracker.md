@@ -4,12 +4,13 @@ Update this file after every meaningful implementation change.
 
 ## Current Phase
 
-**Phase 5 — Target application + LamTeknik web UI** complete. End-to-end CDC verification depends on running Besu, API, Kafka, and consumer locally.
+**VM deployment planning** — production runs on `.40` (nodes), `.41` (gateway), `.42` (app + CDC). Local stack remains dev reference.
 
 ## Current Goal
 
-- Run full stack and validate CDC smoke test (row change → Kafka → Besu).
-- Complete `API/command/how-to-ipfs-api.md` when IPFS REST endpoints are added to the API layer.
+- Execute [vm-40-node-vault-plan.md](./vm-40-node-vault-plan.md) then [vm-41-gateway-plan.md](./vm-41-gateway-plan.md) on VMs.
+- Deploy app + CDC on `.42` per [revamp-system-plan.md](./revamp-system-plan.md) Phase 3.
+- Validate end-to-end CDC smoke test (row change → Kafka → gateway → Besu).
 
 ---
 
@@ -66,9 +67,11 @@ Update this file after every meaningful implementation change.
 
 ## Next Up
 
-1. **End-to-end CDC smoke test** — update an `akreditasi` row, confirm topic + `GET /lamteknik/akreditasi/{id}` on `:4100`.
-2. **IPFS API guide** — `API/command/how-to-ipfs-api.md`.
-3. **Optional** — port `performance-monitor.js` from ERP reference for latency benchmarking.
+1. **VM `.40`** — Besu + IPFS + ufw per [vm-40-node-vault-plan.md](./vm-40-node-vault-plan.md).
+2. **VM `.41`** — Gateway + Kong per [vm-41-gateway-plan.md](./vm-41-gateway-plan.md).
+3. **VM `.42`** — App + CDC stack (revamp Phase 3).
+4. **End-to-end CDC smoke test** — update an `akreditasi` row on `.42`, confirm on-chain via gateway.
+5. **IPFS API guide** — `API/command/how-to-ipfs-api.md`.
 
 ---
 
