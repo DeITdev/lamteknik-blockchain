@@ -4,6 +4,8 @@ Step-by-step plan to deploy the multi-VM layout described in [infrastructure.md]
 
 **Status:** Planned — not yet executed.
 
+**Last updated:** 2026-09-03
+
 **Goal:** Servers `.40` (nodes) + `.41` (gateway); **app + CDC on your local machine** for now. Bifrost-like gateway access without FireFly.
 
 ---
@@ -19,8 +21,6 @@ When complete:
 5. CDC: local MySQL → local Kafka → local consumer → gateway `.41` → Besu `.40`; files → IPFS `.40` direct.
 
 ---
-
-
 
 ## Architecture summary
 
@@ -49,14 +49,165 @@ flowchart LR
 | `10.9.23.41` | LamTeknik Gateway + admin |
 | **Your PC** | MySQL, NestJS, web, Kafka, Debezium, consumer |
 
+---
 
+## Blockchain API Gateway — what we use
+
+The gateway is **not** a third-party product. It is a **custom LamTeknik Gateway** built by extending the existing [`API/server-lamteknik.js`](../API/server-lamteknik.js).
+
+| Decision | Choice |
+|----------|--------|
+| **Gateway product** | Custom Express + ethers.js service (`server-lamteknik.js`) |
+| **Rejected** | Hyperledger FireFly (no Bifrost-like admin, no IPFS in gateway mode, CDC route rewrite, high ops cost) |
+| **Analogy** | Bifrost-style: one HTTPS base URL + `x-api-key` for researchers |
+| **Host** | Server `10.9.23.41` only — not on the node vault (`.40`) or app/CDC machine |
+| **Port** | `:4100` (internal); public entry via HTTPS reverse proxy later |
+
+Researchers never receive raw Besu (`:8545`) or IPFS Cluster (`:9094`) URLs.
+
+### Gateway technology stack
+
+```mermaid
+flowchart TB
+  subgraph public [Researchers]
+    User["HTTPS + x-api-key"]
+  end
+
+  subgraph vm41 ["Server .41 — Gateway VM"]
+    direction TB
+    HTTPS["Caddy/nginx :443 optional Phase 5"]
+    Kong["Kong OSS optional admin UI"]
+    GW["LamTeknik Gateway :4100"]
+    HTTPS --> Kong
+    Kong --> GW
+    HTTPS --> GW
+  end
+
+  subgraph vm40 ["Server .40 — Node vault"]
+    Besu["Besu IBFT :8545"]
+    IPFSRest["IPFS Cluster REST :9094"]
+    IPFSGw["IPFS gateway :8080"]
+  end
+
+  subgraph local ["Local PC — App + CDC"]
+    Consumer["consumer-lamteknik"]
+  end
+
+  User --> HTTPS
+  Consumer -->|"POST /lamteknik/*"| GW
+  Consumer -->|"file columns direct"| IPFSRest
+  GW -->|"ethers.js JsonRpcProvider"| Besu
+  GW -->|"IPFS proxy routes"| IPFSRest
+  GW -->|"IPFS proxy routes"| IPFSGw
+```
+
+#### Core runtime (required)
+
+| Layer | Technology | Role |
+|-------|------------|------|
+| HTTP server | **Express.js** (`server-lamteknik.js`) | REST API, route mounting, middleware |
+| Blockchain client | **ethers.js v6** | Besu RPC reads/writes, tx signing |
+| Contract artifacts | **Hardhat** deploy output in `API/build/contracts/lamteknik/` | 26 `*Storage.sol` ABIs + addresses loaded at startup |
+| Container | **Docker** (`API/Dockerfile` + `API/docker-compose.yml`) | Deploy on `.41` |
+| Config | **`.env`** on `.41` | Cross-VM URLs, signer key, API keys |
+
+#### Authentication (required — not yet built)
+
+| Layer | Technology | Role |
+|-------|------------|------|
+| Auth header | `x-api-key: sk-...` | Researcher access control |
+| Key store (pilot) | Env `API_KEYS` JSON or mounted `API/keys.json` | Simple file-based key admin |
+| Key profiles | Per-key `allowedEntities[]`, optional rate-limit metadata | Scope researchers to specific entity slugs |
+| Internal bypass | `API_KEY_REQUIRED=false` for dev; dedicated internal key for CDC | Consumer on local PC calls gateway without researcher keys |
+
+Auth is implemented **inside Express first** — not delegated to a separate product.
+
+Optional npm helpers for rate limiting: `express-rate-limit` or `api-rate-guard` (per-key `keyGenerator`).
+
+#### Optional add-ons (Phase 2.4 / Phase 5)
+
+| Layer | Technology | When to use |
+|-------|------------|-------------|
+| API management UI | **Kong OSS + Kong Manager** (`:8000–8002`) | When env-based key files are too manual; GUI for Consumers + `key-auth` credentials |
+| HTTPS termination | **Caddy or nginx** on `.41` | Production researcher access |
+| Rate limiting | Kong `rate-limiting` plugin | Post-pilot hardening |
+
+**Kong is optional, not the core gateway.** Two valid modes:
+
+1. **Pilot (simpler):** Express handles `x-api-key` directly; no Kong.
+2. **Production admin:** Kong terminates auth at the edge; gateway trusts internal network only.
+
+### Library options evaluated (2026-09-03)
+
+No drop-in library replaces the full LamTeknik gateway (26 entity routes + CDC envelope + IPFS proxy) without rework.
+
+| Option | Fit | Notes |
+|--------|-----|-------|
+| **Extend `server-lamteknik.js`** | **Best — chosen** | Already has 26 entity routes, CDC envelope, consumer integration |
+| **Kong OSS** | Good auth/admin layer | `key-auth` plugin + Kong Manager GUI; optional on `.41` |
+| **EthConnect** ([hyperledger/firefly-ethconnect](https://github.com/hyperledger/firefly-ethconnect)) | Partial | ABI→REST for Besu; different route shape than CDC consumer expects |
+| **Hyperledger FireFly** | Rejected | Evaluated and dropped — see decisions log |
+| **aragon/ipfs-api-proxy** | IPFS only | `X-API-KEY` + upload proxy; reference for IPFS routes, not full gateway |
+| **Turbine / CascadeRPC / nodecore** | Wrong layer | JSON-RPC proxies for public chains; not entity REST + IPFS |
+
+**Recommendation:** keep custom Express gateway; optionally add Kong for admin UI in Phase 5.
+
+### Gateway — exists today vs must be built
+
+#### Already implemented ([progress-tracker.md](./progress-tracker.md))
+
+- [`API/server-lamteknik.js`](../API/server-lamteknik.js) — Express + ethers, auto-routes for 26 entities under `/lamteknik/{entity}`
+- Hardhat deploy (`npm run deploy:lamteknik`), Postman collection, guides
+- Works locally on `:4100` with **no auth**, **no IPFS proxy**, **no Docker**
+
+#### Must be built (Phase 2)
+
+| # | Work item | Files |
+|---|-----------|-------|
+| 1 | Dockerize gateway | `API/Dockerfile`, `API/docker-compose.yml` |
+| 2 | `x-api-key` middleware | `API/server-lamteknik.js`, `API/.env.example` |
+| 3 | IPFS proxy routes | `server-lamteknik.js`, `API/command/how-to-ipfs-api.md` |
+| 4 | Cross-VM env vars | `BLOCKCHAIN_RPC_URL`, `IPFS_*` pointing to `.40` |
+| 5 | `/v1` prefix (optional alias) | Map `/v1/lamteknik/*` and `/v1/ipfs/*` for researchers |
+| 6 | Deploy to `.41` | Contract artifacts volume; smoke test from local consumer |
+
+### Gateway API surface
+
+#### Blockchain routes (existing — add auth)
+
+| Method | Path | Notes |
+|--------|------|-------|
+| `GET` | `/health` | No key required |
+| `GET` | `/lamteknik` | List entities |
+| `GET` | `/lamteknik/{entity}/count`, `/:recordId`, etc. | Read contract state |
+| `POST` | `/lamteknik/{entity}` | CDC envelope write; signed by gateway `DEPLOYER_PRIVATE_KEY` |
+
+Researcher-facing URL pattern: `https://<gateway>/v1/lamteknik/akreditasi/count`
+
+#### IPFS proxy routes (new)
+
+| Method | Path | Backend on `.40` |
+|--------|------|------------------|
+| `POST` | `/v1/ipfs/upload` | `http://10.9.23.40:9094/add?cid-version=1` |
+| `GET` | `/v1/ipfs/:cid` | `http://10.9.23.40:8080/ipfs/:cid` |
+| `GET` | `/v1/ipfs/:cid/metadata` | Cluster status / DAG stat |
+
+**Note:** the CDC consumer still uploads file columns **directly** to `.40:9094` (bypasses gateway). Researchers use the gateway IPFS routes.
+
+### Security model
+
+| Actor | Auth | Reaches |
+|-------|------|---------|
+| Researcher | `x-api-key` via gateway | `/v1/lamteknik/*`, `/v1/ipfs/*` on `.41` only |
+| CDC consumer | Internal key or trusted network bypass | Gateway `.41:4100` + IPFS `.40:9094` direct |
+| Gateway signer | `DEPLOYER_PRIVATE_KEY` in env | Signs automated/on-behalf writes to Besu |
+| Public internet | Blocked from `.40` | ufw on node vault |
+
+Researchers get **access keys**, not Besu private keys. Optional future: map researcher profiles to dedicated Besu keys.
 
 ---
 
-
-
 ## Phase 0 — Prerequisites
-
 
 | Item | Action |
 |------|--------|
@@ -66,21 +217,16 @@ flowchart LR
 | Secrets | `swarm.key`, `CLUSTER_SECRET` on `.40`; gateway `.env` on `.41` |
 | Network | Add your PC IP to `.40` ufw; test reachability to `.41:4100` and `.40:9094` |
 
-
 **Docs to read:**
 
-- `[backend/blockchain-besu-ibft/command/run-besu-ibft.md](../backend/blockchain-besu-ibft/command/run-besu-ibft.md)`
-- `[backend/ipfs-cluster-private/command/run-ipfs-private.md](../backend/ipfs-cluster-private/command/run-ipfs-private.md)`
-- `[API/command/how-to-blockchain-api.md](../API/command/how-to-blockchain-api.md)`
-- `[connection/command/run-kafka-debezium.md](../connection/command/run-kafka-debezium.md)`
+- [`backend/blockchain-besu-ibft/command/run-besu-ibft.md`](../backend/blockchain-besu-ibft/command/run-besu-ibft.md)
+- [`backend/ipfs-cluster-private/command/run-ipfs-private.md`](../backend/ipfs-cluster-private/command/run-ipfs-private.md)
+- [`API/command/how-to-blockchain-api.md`](../API/command/how-to-blockchain-api.md)
+- [`connection/command/run-kafka-debezium.md`](../connection/command/run-kafka-debezium.md)
 
 ---
 
-
-
 ## Phase 1 — Node vault (VM `.40`)
-
-
 
 ### 1.1 Start Besu IBFT
 
@@ -99,25 +245,19 @@ cd backend/ipfs-cluster-private
 docker compose up -d
 ```
 
-
-
 ### 1.3 Expose IPFS to trusted VMs (critical)
 
-Edit `[backend/ipfs-cluster-private/docker-compose.yml](../backend/ipfs-cluster-private/docker-compose.yml)`:
+Edit [`backend/ipfs-cluster-private/docker-compose.yml`](../backend/ipfs-cluster-private/docker-compose.yml):
 
-
-| Service    | Change                                      |
-| ---------- | ------------------------------------------- |
-| `cluster0` | `127.0.0.1:9094:9094` → `9094:9094`         |
-| `ipfs0`    | `127.0.0.1:8080:8080` → `8080:8080`         |
-| `ipfs0`    | Keep `127.0.0.1:5001:5001` (WebUI ops only) |
-
+| Service | Change |
+|---------|--------|
+| `cluster0` | `127.0.0.1:9094:9094` → `9094:9094` |
+| `ipfs0` | `127.0.0.1:8080:8080` → `8080:8080` |
+| `ipfs0` | Keep `127.0.0.1:5001:5001` (WebUI ops only) |
 
 ```bash
 docker compose up -d --force-recreate ipfs0 cluster0
 ```
-
-
 
 ### 1.4 Configure firewall
 
@@ -131,9 +271,7 @@ curl -s -X POST http://10.9.23.40:8545 -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}'
 ```
 
-Add your PC IP to `.40` ufw before this will work for IPFS.
-
-
+Add your PC IP to `.40` ufw before IPFS checks will work.
 
 ### 1.5 Deploy smart contracts
 
@@ -147,27 +285,23 @@ npm run deploy:lamteknik
 
 Copy `API/build/contracts/lamteknik/` to server `.41` for the gateway container, or deploy on `.41` directly.
 
-**Deliverable:** `.40` nodes healthy, contracts deployed, IPFS/Besu reachable from `.41` only.
+**Deliverable:** `.40` nodes healthy, contracts deployed, IPFS/Besu reachable from `.41`.
 
 ---
 
-
-
 ## Phase 2 — LamTeknik Gateway (VM `.41`)
 
-Extend `[API/server-lamteknik.js](../API/server-lamteknik.js)` into a Bifrost-like gateway.
+Extend [`API/server-lamteknik.js`](../API/server-lamteknik.js) into a Bifrost-like gateway. See **Blockchain API Gateway** section above for full stack and library rationale.
 
 ### 2.1 Containerize API
 
 Create:
 
-
-| File                     | Purpose                                                                 |
-| ------------------------ | ----------------------------------------------------------------------- |
-| `API/Dockerfile`         | Multi-stage: `npm ci`, compile, runtime with `node server-lamteknik.js` |
-| `API/docker-compose.yml` | Service on `:4100`; volume for `build/contracts/lamteknik/`             |
-| `API/.env.example`       | Document cross-VM URLs (see infrastructure.md)                          |
-
+| File | Purpose |
+|------|---------|
+| `API/Dockerfile` | Multi-stage Node 22: `npm ci`, runtime with `node server-lamteknik.js` |
+| `API/docker-compose.yml` | Service on `:4100`; volume for `build/contracts/lamteknik/` |
+| `API/.env.example` | Cross-VM URLs + auth config (see infrastructure.md) |
 
 `.env` on `.41`:
 
@@ -178,61 +312,60 @@ CHAIN_ID=1337
 DEPLOYER_PRIVATE_KEY=<genesis dev key or dedicated signer>
 IPFS_CLUSTER_REST_URL=http://10.9.23.40:9094
 IPFS_GATEWAY_URL=http://10.9.23.40:8080
+CORS_ORIGIN=*
+API_KEY_REQUIRED=true
+API_KEYS_FILE=/app/keys.json
 ```
-
-
 
 ### 2.2 API key authentication
 
 Add to `server-lamteknik.js`:
 
-
-| Feature   | Detail                                                                                                    |
-| --------- | --------------------------------------------------------------------------------------------------------- |
-| Header    | `x-api-key: sk-...`                                                                                       |
-| Key store | Env `API_KEYS` JSON file, or `API/keys.json` volume *(simple admin edit)*                                 |
-| Bypass    | `API_KEY_REQUIRED=false` for local dev; internal CDC uses localhost without key or dedicated internal key |
-| Profiles  | Per key: `allowedEntities[]`, optional rate limit metadata                                                |
-
+| Feature | Detail |
+|---------|--------|
+| Header | `x-api-key: sk-...` |
+| Key store | Env `API_KEYS` JSON or `API/keys.json` volume *(simple admin edit)* |
+| Bypass | `API_KEY_REQUIRED=false` for local dev; CDC uses dedicated internal key |
+| Profiles | Per key: `allowedEntities[]`, optional rate limit metadata |
 
 Routes requiring keys: all `/lamteknik/*` and `/ipfs/*` except `GET /health`.
 
-CDC consumer on same or trusted network: use internal bypass or fixed internal key.
-
 ### 2.3 IPFS proxy routes
 
-Implement routes planned in `[API/command/how-to-ipfs-api.md](../API/command/how-to-ipfs-api.md)`:
+Implement routes in [`API/command/how-to-ipfs-api.md`](../API/command/how-to-ipfs-api.md):
 
-
-| Method | Path                                | Backend                                             |
-| ------ | ----------------------------------- | --------------------------------------------------- |
-| `POST` | `/v1/ipfs/upload` or `/ipfs/upload` | Proxy to `http://10.9.23.40:9094/add?cid-version=1` |
-| `GET`  | `/v1/ipfs/:cid`                     | Proxy to `http://10.9.23.40:8080/ipfs/:cid`         |
-| `GET`  | `/v1/ipfs/:cid/metadata`            | Cluster status / dag stat                           |
-
-
-Update `[API/command/how-to-ipfs-api.md](../API/command/how-to-ipfs-api.md)` when implemented.
+| Method | Path | Backend |
+|--------|------|---------|
+| `POST` | `/v1/ipfs/upload` | Proxy to `http://10.9.23.40:9094/add?cid-version=1` |
+| `GET` | `/v1/ipfs/:cid` | Proxy to `http://10.9.23.40:8080/ipfs/:cid` |
+| `GET` | `/v1/ipfs/:cid/metadata` | Cluster status / DAG stat |
 
 ### 2.4 Optional — Kong admin dashboard (Bifrost-like UI)
 
 If env-based key files are too manual, add Kong on `.41`:
 
-
-| Kong object | Config                                                              |
-| ----------- | ------------------------------------------------------------------- |
-| Upstream    | `lamteknik-gateway:4100`                                            |
-| Route       | `/v1` → gateway                                                     |
-| Plugin      | `key-auth` with header `x-api-key`                                  |
-| Admin       | Kong Manager OSS on `:8002` — create Consumers + credentials in GUI |
-
+| Kong object | Config |
+|-------------|--------|
+| Upstream | `lamteknik-gateway:4100` |
+| Route | `/v1` → gateway |
+| Plugin | `key-auth` with header `x-api-key` |
+| Admin | Kong Manager OSS on `:8002` — create Consumers + credentials in GUI |
 
 Gateway can stay key-aware internally, or Kong terminates auth and gateway trusts internal network only.
 
-**Deliverable:** `curl http://10.9.23.41:4100/health` shows `contractsLoaded: 26`; researcher POST with valid key succeeds.
+### 2.5 Deploy and verify
+
+```bash
+cd API
+docker compose up -d
+curl http://10.9.23.41:4100/health          # contractsLoaded: 26
+curl -H "x-api-key: sk-test" \
+  http://10.9.23.41:4100/lamteknik/akreditasi/count
+```
+
+**Deliverable:** Gateway healthy on `.41`; researcher POST with valid key succeeds.
 
 ---
-
-
 
 ## Phase 3 — App + CDC (local machine)
 
@@ -292,11 +425,7 @@ npm install && npm run dev
 
 ---
 
-
-
 ## Phase 4 — Integration testing
-
-
 
 ### 4.1 Gateway smoke test
 
@@ -307,8 +436,6 @@ curl -H "x-api-key: <test-key>" \
   http://10.9.23.41:4100/lamteknik/akreditasi/count
 ```
 
-
-
 ### 4.2 CDC end-to-end
 
 1. Update a row in `akreditasi` via NestJS or MySQL CLI.
@@ -316,15 +443,11 @@ curl -H "x-api-key: <test-key>" \
 3. Consumer logs `[OK] /lamteknik/akreditasi ...`.
 4. Verify on-chain: `GET /lamteknik/akreditasi/{id}` on gateway.
 
-
-
 ### 4.3 IPFS file column
 
 1. Update a row with a file/binary column watched by consumer.
 2. Consumer logs `[IPFS] table/id.field -> bafy...`.
-3. Confirm CID retrievable via gateway `/ipfs/{cid}` or `.40:8080`.
-
-
+3. Confirm CID retrievable via gateway `/v1/ipfs/{cid}` or `.40:8080`.
 
 ### 4.4 Researcher profile test
 
@@ -338,28 +461,22 @@ Entities: akreditasi, user, ...
 
 Confirm POST store + GET read work with key; fail without key.
 
-**Deliverable:** All four tests pass; document results in `[progress-tracker.md](./progress-tracker.md)`.
+**Deliverable:** All four tests pass; document results in [`progress-tracker.md`](./progress-tracker.md).
 
 ---
-
-
 
 ## Phase 5 — Hardening (optional, post-pilot)
 
-
-| Task                     | Detail                                                                   |
-| ------------------------ | ------------------------------------------------------------------------ |
-| HTTPS                    | Caddy/nginx on `.41` → gateway `:4100`; Let's Encrypt                    |
-| Kong production          | Move key admin to Kong Manager; rate limiting plugin                     |
-| Per-researcher Besu keys | Fund separate keys on Besu dev chain; map in gateway profile             |
-| Monitoring               | Prometheus/Grafana on `.40` or central ops VM                            |
-| Secrets                  | Move `DEPLOYER_PRIVATE_KEY` to env file outside git; rotate API keys     |
-| Docs                     | Update `[run-all.md](../run-all.md)` with multi-VM section pointing here |
-
+| Task | Detail |
+|------|--------|
+| HTTPS | Caddy/nginx on `.41` → gateway `:4100`; Let's Encrypt |
+| Kong production | Move key admin to Kong Manager; rate limiting plugin |
+| Per-researcher Besu keys | Fund separate keys on Besu dev chain; map in gateway profile |
+| Monitoring | Prometheus/Grafana on `.40` or central ops VM |
+| Secrets | Move `DEPLOYER_PRIVATE_KEY` to env file outside git; rotate API keys |
+| Docs | Update [`run-all.md`](../run-all.md) with multi-VM section pointing here |
 
 ---
-
-
 
 ## Phase 6 — Scale app + CDC to server (future)
 
@@ -391,36 +508,28 @@ When the local PC is no longer enough:
 | 9 | Researcher key test | Server `.41` | ☐ |
 | 10 | *(Future)* Move app+CDC to server | Server | ☐ |
 
-
 ---
-
-
 
 ## Files to create or modify
 
-
-| Path                                              | Action                                        |
-| ------------------------------------------------- | --------------------------------------------- |
-| `context/infrastructure.md`                       | ✅ Written — VM layout reference               |
-| `context/revamp-system-plan.md`                   | ✅ This file                                   |
-| `backend/ipfs-cluster-private/docker-compose.yml` | Change port binds `9094`, `8080`              |
-| `API/Dockerfile`                                  | Create                                        |
-| `API/docker-compose.yml`                          | Create                                        |
-| `API/server-lamteknik.js`                         | Add auth + IPFS routes                        |
-| `API/.env.example`                                | Cross-VM vars + key config                    |
-| `API/command/how-to-ipfs-api.md`                  | Complete TODO                                 |
-| `target/docker-compose.yml`                       | Replace `host.docker.internal` with `.40` IPs |
-| `connection/consumer-lamteknik/.env.example`      | Document `API_ENDPOINT` per layout            |
-| `run-all.md`                                      | Add pointer to multi-VM docs *(optional)*     |
-| `context/progress-tracker.md`                     | Update after each phase completes             |
-
+| Path | Action |
+|------|--------|
+| `context/infrastructure.md` | ✅ Written — VM layout reference |
+| `context/revamp-system-plan.md` | ✅ This file (updated 2026-09-03) |
+| `backend/ipfs-cluster-private/docker-compose.yml` | Change port binds `9094`, `8080` |
+| `API/Dockerfile` | Create |
+| `API/docker-compose.yml` | Create |
+| `API/server-lamteknik.js` | Add auth + IPFS routes |
+| `API/.env.example` | Cross-VM vars + key config |
+| `API/command/how-to-ipfs-api.md` | Complete TODO |
+| `target/docker-compose.yml` | Replace `host.docker.internal` with `.40` IPs |
+| `connection/consumer-lamteknik/.env.example` | Document `API_ENDPOINT` per layout |
+| `run-all.md` | Add pointer to multi-VM docs *(optional)* |
+| `context/progress-tracker.md` | Update after each phase completes |
 
 ---
 
-
-
 ## Decisions log
-
 
 | Date | Decision |
 |------|----------|
@@ -429,16 +538,16 @@ When the local PC is no longer enough:
 | 2026-08-11 | CDC co-located with MySQL (never on gateway VM) |
 | 2026-08-17 | **App + CDC on local PC**; servers for chain + gateway only |
 | 2026-08-11 | LamTeknik Gateway = extend `API/server-lamteknik.js` |
-
+| 2026-09-03 | **Custom Express gateway confirmed** — no drop-in library; Kong optional for admin only |
+| 2026-09-03 | EthConnect / FireFly / JSON-RPC proxies evaluated and rejected for full gateway role |
+| 2026-09-03 | Auth in Express first (`x-api-key` + `keys.json`); optional `express-rate-limit` for per-key limits |
 
 ---
-
-
 
 ## References
 
 - [infrastructure.md](./infrastructure.md) — ports, firewall, env vars, traffic flows
 - [project-overview.md](./project-overview.md) — CDC envelope and repo map
 - [progress-tracker.md](./progress-tracker.md) — session progress
-- Internal Cursor plan: `.cursor/plans/two-vm_api_gateway_49064ad2.plan.md`
-
+- [`API/command/how-to-blockchain-api.md`](../API/command/how-to-blockchain-api.md) — current REST API guide
+- [`API/server-lamteknik.js`](../API/server-lamteknik.js) — gateway implementation
