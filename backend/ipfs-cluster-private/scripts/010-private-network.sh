@@ -10,6 +10,9 @@ ipfs config DNS.Resolvers --json '{}'
 ipfs config AutoTLS.Enabled --bool false
 ipfs config Routing.Type dht
 
+# Private swarm: serve only local pins via gateway (no public DHT provider discovery)
+ipfs config Gateway.NoFetch --bool true
+
 # Remove any public bootstrap (including cached autoconf peers)
 ipfs bootstrap rm --all || true
 
@@ -18,7 +21,7 @@ for peer in $PRIVATE_BOOTSTRAP_PEERS; do
   ipfs bootstrap add "$peer"
 done
 
-# Allow WebUI to call the RPC API (same host or via SSH tunnel)
+# Allow WebUI to call the RPC API (localhost, VM IP, or nginx public URL)
 ipfs config --json API.HTTPHeaders.Access-Control-Allow-Origin \
-  '["http://localhost:3000", "http://127.0.0.1:5001", "https://webui.ipfs.io"]'
+  '["http://localhost:3000", "http://127.0.0.1:5001", "http://10.9.23.40:5001", "https://webui.ipfs.io"]'
 ipfs config --json API.HTTPHeaders.Access-Control-Allow-Methods '["PUT", "POST", "GET"]'

@@ -16,7 +16,7 @@ backend/ipfs-cluster-private/
 ├── swarm.key                   # Private network PSK (generated locally, not in git)
 ├── .env                        # CLUSTER_SECRET (generated locally, not in git)
 ├── assets/
-│   └── webui-v4.12.0.car       # WebUI bundle for offline use (downloaded, not in git)
+│   └── webui-v4.13.0.car       # WebUI bundle — version must match Kubo (see below)
 ├── scripts/
 │   ├── generate-swarm-key.sh   # Create swarm.key
 │   ├── download-webui-car.sh   # Download WebUI CAR from GitHub
@@ -75,21 +75,31 @@ On every Kubo container start, `010-private-network.sh` runs **before** the daem
 
 Cluster peers join via `CLUSTER_SECRET` (CRDT mode). `cluster1`–`cluster3` bootstrap to `cluster0` on first start.
 
-### WebUI on a private network
+### WebUI on a private network — two separate problems
 
-Kubo does not bundle WebUI. Without local blocks, `http://127.0.0.1:5001/webui` hangs on a private network.
+Private IPFS WebUI often breaks for **two unrelated reasons**. Fixing one does not fix the other.
 
-`ipfs0` runs `020-import-webui.sh`, which imports `assets/webui-v4.12.0.car` and pins WebUI v4.12.0 (`bafybeihxglpcfyarpm7apn7xpezbuoqgk3l5chyk7w4gvrjwk45rqohlmm`) before the daemon starts.
+| Problem | Symptom | Fix |
+|---------|---------|-----|
+| **1. Missing / wrong WebUI version** | 504 on gateway, “no providers found for the CID” after `/webui/` redirect | `download-webui-car.sh` must match **your Kubo version** (e.g. Kubo 0.43 → WebUI **v4.13.0** CID `bafybeiciqeyipump…`, not v4.12.0). Run `020-import-webui.sh` via container recreate. |
+| **2. Port not reachable** | Browser cannot connect at all (`connection refused`, timeout) on `10.9.23.40:5001` | Change Docker bind from `127.0.0.1:5001:5001` to `5001:5001` in `docker-compose.yml` |
+| **3. CORS (after #2)** | Page shell loads but API calls fail in browser console | Add your WebUI origin (e.g. `http://10.9.23.40:5001`) to `API.HTTPHeaders` in `010-private-network.sh` |
 
-### Host ports (ipfs0 / cluster0)
+Kubo does **not** bundle WebUI. On a private swarm it cannot fetch WebUI from the public network — that is what the CAR download solves.
+
+The CAR was already working on this VM (WebUI pinned, `127.0.0.1:5001/webui` responded). What blocked **your** access was problem **#2**: compose intentionally bound `:5001` to localhost only (SSH-tunnel ops pattern in the original runbook).
+
+### Host ports (ipfs0 / cluster0) — VM `.40` dev layout
 
 | Port | Service | Binding |
 |---|---|---|
-| 5001 | Kubo API + WebUI | `127.0.0.1` only |
-| 8080 | Kubo gateway | `127.0.0.1` only |
-| 9094 | Cluster REST API | `127.0.0.1` only |
+| 5001 | Kubo API + WebUI | all interfaces (`5001:5001`) |
+| 8080 | Kubo gateway | all interfaces (`8080:8080`) |
+| 9094 | Cluster REST API | all interfaces (`9094:9094`) |
 | 9095 | Cluster IPFS proxy | all interfaces |
 | 9096 | Cluster swarm | all interfaces |
+
+For localhost-only / SSH-tunnel ops, change `5001:5001` back to `127.0.0.1:5001:5001`.
 
 Swarm port 4001 is **not** exposed to the host; Kubo peers talk over the internal Docker network only.
 

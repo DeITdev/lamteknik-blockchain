@@ -9,7 +9,7 @@ services:
       - ../genesis.json:/opt/besu/genesis.json
       - ../Node-1/data:/opt/besu/data
     ports:
-      - "8545:8545"
+      - "127.0.0.1:8545:8545"
     networks:
       besu-network:
         ipv4_address: 172.16.239.11
@@ -138,12 +138,18 @@ services:
   # Chainlens Blockchain Explorer
   chainlens-mongodb:
     container_name: ibft-chainlens-mongodb
-    image: mongo:5.0.8
+    image: mongo:4.4
     entrypoint: mongod --bind_ip "0.0.0.0"
     networks:
       besu-network:
         ipv4_address: 172.16.239.16
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mongo", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
 
   chainlens-redis:
     container_name: ibft-chainlens-redis
@@ -158,7 +164,7 @@ services:
     image: web3labs/epirus-free-api:latest
     depends_on:
       chainlens-mongodb:
-        condition: service_started
+        condition: service_healthy
       chainlens-redis:
         condition: service_started
     environment:
@@ -196,7 +202,7 @@ services:
       node-1:
         condition: service_healthy
       chainlens-mongodb:
-        condition: service_started
+        condition: service_healthy
       chainlens-redis:
         condition: service_started
     environment:

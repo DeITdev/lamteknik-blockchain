@@ -2,12 +2,10 @@ services:
   gateway:
     build: .
     container_name: lamteknik-gateway
-    ports:
-      - "4100:4100"
+    network_mode: host
     env_file:
       - .env
     volumes:
       - ./build/contracts/lamteknik:/app/build/contracts/lamteknik:ro
       - ./build/lamteknik-deployments.json:/app/build/lamteknik-deployments.json:ro
-      - ./keys.json:/app/keys.json:ro
     restart: unless-stopped

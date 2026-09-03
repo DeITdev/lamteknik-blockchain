@@ -18,14 +18,14 @@ services:
         /dns4/ipfs2/tcp/4001/p2p/12D3KooWNpr6j1mwFGcNfCc9VootShz6ZehF7x2LZeWWrYWmY5HD
         /dns4/ipfs3/tcp/4001/p2p/12D3KooWD4zzNwWdpddnXaELUFnJq8zeZuHL33dX8Y83mwSyptSL
     ports:
-      - "127.0.0.1:5001:5001" # ipfs api / webui
-      - "127.0.0.1:8080:8080" # ipfs gateway
+      - "5001:5001" # ipfs api / webui
+      - "8080:8080" # ipfs gateway
     volumes:
       - ./compose/ipfs0:/data/ipfs
       - ./swarm.key:/data/ipfs/swarm.key
       - ./scripts/010-private-network.sh:/container-init.d/010-private-network.sh:ro
       - ./scripts/020-import-webui.sh:/container-init.d/020-import-webui.sh:ro
-      - ./assets/webui-v4.12.0.car:/assets/webui-v4.12.0.car:ro
+      - ./assets/webui-v4.13.0.car:/assets/webui-v4.13.0.car:ro
 
   cluster0:
     container_name: cluster0
@@ -40,7 +40,7 @@ services:
       CLUSTER_RESTAPI_HTTPLISTENMULTIADDRESS: /ip4/0.0.0.0/tcp/9094
       CLUSTER_MONITORPINGINTERVAL: 2s
     ports:
-      - "127.0.0.1:9094:9094"
+      - "9094:9094"
       - "9095:9095"
       - "9096:9096"
     volumes:

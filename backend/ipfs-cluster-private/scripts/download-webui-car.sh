@@ -4,8 +4,8 @@ set -e
 cd "$(dirname "$0")/.."
 mkdir -p assets
 
-URL="https://github.com/ipfs/ipfs-webui/releases/download/v4.12.0/ipfs-webui%40v4.12.0.car"
-OUT="assets/webui-v4.12.0.car"
+URL="https://github.com/ipfs/ipfs-webui/releases/download/v4.13.0/ipfs-webui%40v4.13.0.car"
+OUT="assets/webui-v4.13.0.car"
 
 if [ -f "$OUT" ]; then
   echo "$OUT already exists"

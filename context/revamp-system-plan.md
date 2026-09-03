@@ -1,17 +1,14 @@
 # LamTeknik System Revamp — Implementation Plan
 
-Step-by-step plan to deploy the multi-VM layout described in [infrastructure.md](./infrastructure.md).
+Step-by-step plan to deploy the 2-VM layout described in [infrastructure.md](./infrastructure.md).
 
-**Status:** Gateway code implemented — VM deployment pending.
+**Status:** Infra stack deploying on `.40` — app + CDC on `.42` pending.
 
-**Last updated:** 2026-09-03
+**Last updated:** 2026-09-04
 
-**Goal:** All production work runs **on VMs** — not local Docker. Servers `.40` (nodes), `.41` (Express BAF gateway), `.42` (app + CDC).
+**Goal:** Server `.40` runs Besu + IPFS + open API gateway. Server `.42` runs app + CDC.
 
-**VM runbooks (execute in order):**
-
-- [vm-40-node-vault-plan.md](./vm-40-node-vault-plan.md) — Besu + IPFS on `10.9.23.40`
-- [vm-41-gateway-plan.md](./vm-41-gateway-plan.md) — LamTeknik Gateway on `10.9.23.41`
+**VM runbook:** [vm-40-node-vault-plan.md](./vm-40-node-vault-plan.md)
 
 ---
 
@@ -19,11 +16,10 @@ Step-by-step plan to deploy the multi-VM layout described in [infrastructure.md]
 
 When complete:
 
-1. Server `.40` runs Besu + IPFS only, firewalled to `.41` + `.42`.
-2. Server `.41` runs the **LamTeknik Gateway** (single Docker container on `:4100`).
-3. Server `.42` runs LamTeknik app + **Kafka + Debezium + consumer** + MySQL.
-4. Researchers use `http://10.9.23.41:4100` + `x-api-key`.
-5. CDC: `.42` MySQL → Kafka → consumer → gateway `.41` → Besu `.40`; files → IPFS `.40` direct.
+1. Server `.40` runs Besu IBFT + IPFS Cluster + **LamTeknik Gateway** on `:4100` (no API key required).
+2. Server `.42` runs LamTeknik app + **Kafka + Debezium + consumer** + MySQL.
+3. Apps use `http://10.9.23.40:4100` (or nginx public URL) — no `x-api-key`.
+4. CDC: `.42` MySQL → Kafka → consumer → gateway `.40` → Besu; files → IPFS on `.40`.
 
 ---
 
@@ -34,10 +30,9 @@ flowchart LR
   subgraph vm40 [Server .40]
     Besu[Besu IBFT]
     IPFS[IPFS Cluster]
-  end
-
-  subgraph vm41 [Server .41]
     GW[LamTeknik Gateway :4100]
+    GW --> Besu
+    GW --> IPFS
   end
 
   subgraph vm42 [Server .42]
@@ -45,184 +40,73 @@ flowchart LR
     CDC[Kafka + Debezium + consumer]
   end
 
-  Researchers[Researchers] --> GW
+  App --> GW
   CDC --> GW
   CDC --> IPFS
-  GW --> Besu
-  GW --> IPFS
-  App --> App
 ```
 
 | Host | Runs |
 |------|------|
-| `10.9.23.40` | Besu + IPFS — [vm-40-node-vault-plan.md](./vm-40-node-vault-plan.md) |
-| `10.9.23.41` | LamTeknik Gateway only — [vm-41-gateway-plan.md](./vm-41-gateway-plan.md) |
+| `10.9.23.40` | Besu + IPFS + Gateway — [vm-40-node-vault-plan.md](./vm-40-node-vault-plan.md) |
 | `10.9.23.42` | MySQL, NestJS, web, Kafka, Debezium, consumer |
 
 ---
 
-## Blockchain API Gateway — what we use
+## Gateway — dev mode
 
-The gateway is a **custom LamTeknik Gateway** (Express BAF) extending [`API/server-lamteknik.js`](../API/server-lamteknik.js).
+| Setting | Value |
+|---------|-------|
+| Port | `:4100` |
+| Auth | `API_KEY_REQUIRED=false` |
+| Public access | nginx reverse proxy *(external)* |
+| Signing | Gateway holds `DEPLOYER_PRIVATE_KEY` |
 
-| Decision | Choice |
-|----------|--------|
-| **Gateway product** | Custom Express + ethers.js (`server-lamteknik.js`) |
-| **Rejected** | FireFly, Kong, raw JSON-RPC passthrough, EthConnect (route shape mismatch) |
-| **Pattern** | Blockchain Application Firewall — `x-api-key` + `allowedEntities[]` |
-| **Host** | Server `10.9.23.41` only |
-| **Port** | `:4100`; optional Caddy HTTPS → `:4100` |
+### API surface (no auth in dev)
 
-### Gateway technology stack
+| Method | Path |
+|--------|------|
+| `GET` | `/health` |
+| `GET` | `/lamteknik`, `/lamteknik/{entity}/...` |
+| `POST` | `/lamteknik/{entity}` |
+| `POST` | `/ipfs/upload` |
+| `GET` | `/ipfs/:cid` |
 
-| Layer | Technology | Role |
-|-------|------------|------|
-| HTTP server | Express.js | REST API, auth middleware, IPFS proxy |
-| Blockchain client | ethers.js v6 | Besu reads/writes, custodial signing |
-| Auth | `x-api-key` + `keys.json` | Per-key `role`, `allowedEntities[]` |
-| Signing | Queue + atomic nonce | Serializes concurrent CDC/researcher writes |
-| Container | Docker | Deploy on `.41` |
-
-### Research validation (2026-09-03)
-
-| Source | Validates |
-|--------|-----------|
-| Oracle OBP Besu RPC Proxy | Authenticated REST layer; never expose raw RPC |
-| Cardoso et al. 2025 (LADC) | Custom Node.js gateway + nonce management for Besu |
-| BAF paper (Delgado-von-Eitzen et al.) | Application-level firewall in front of Besu |
-| EthConnect / Kaleido | REST bridge pattern — we extend custom gateway for CDC envelope |
-
-### Gateway — implemented vs VM deploy
-
-#### Implemented
-
-- [`API/server-lamteknik.js`](../API/server-lamteknik.js) — entity routes, auth, signing queue, IPFS proxy, deploy route
-- [`API/Dockerfile`](../API/Dockerfile), [`API/docker-compose.yml`](../API/docker-compose.yml)
-- [`API/keys.json.example`](../API/keys.json.example)
-- [`API/command/how-to-ipfs-api.md`](../API/command/how-to-ipfs-api.md)
-
-#### VM deploy pending
-
-| # | Work item | Host |
-|---|-----------|------|
-| 1 | Besu + IPFS + ufw | `.40` |
-| 2 | Deploy contracts | `.40` / `.41` |
-| 3 | Gateway container + `keys.json` | `.41` |
-| 4 | App + CDC stack | `.42` |
-| 5 | End-to-end smoke test | all |
-
-### Gateway API surface
-
-| Method | Path | Auth |
-|--------|------|------|
-| `GET` | `/health` | None |
-| `GET` | `/lamteknik`, `/lamteknik/{entity}/...` | `x-api-key` |
-| `POST` | `/lamteknik/{entity}` | `x-api-key` (gateway signs) |
-| `POST` | `/deploy/lamteknik` | Admin key only |
-| `POST` | `/ipfs/upload` | `x-api-key` |
-| `GET` | `/ipfs/:cid` | `x-api-key` |
-
-### API key profiles (`keys.json`)
-
-```json
-{
-  "keys": [
-    {
-      "key": "sk-lamtek-cdc-internal",
-      "label": "CDC consumer",
-      "role": "admin",
-      "allowedEntities": ["*"]
-    },
-    {
-      "key": "sk-lamtek-research-xxxx",
-      "label": "Researcher",
-      "role": "researcher",
-      "allowedEntities": ["akreditasi", "user", "prodi"]
-    }
-  ]
-}
-```
-
-**Future Fabric:** add `"backend": "fabric"` per key when Fabric network exists — not implemented now.
-
-### Security model
-
-| Actor | Auth | Reaches |
-|-------|------|---------|
-| Researcher | `x-api-key` | `/lamteknik/*`, `/ipfs/*` on `.41`; entity-scoped |
-| CDC consumer | Internal admin key | Gateway `.41:4100` + IPFS `.40:9094` direct |
-| Admin | Admin key | + `POST /deploy/lamteknik` |
-| Node ops | SSH only | `keys.json`, Besu/IPFS on `.40` |
+Optional auth via `API_KEY_REQUIRED=true` + `keys.json` remains available for production hardening.
 
 ---
 
-## Phase 0 — Prerequisites
-
-| Item | Action |
-|------|--------|
-| Servers | `.40`, `.41`, `.42` provisioned |
-| Git | Clone repo on each VM |
-| Secrets | Besu/IPFS secrets on `.40`; gateway `.env` + `keys.json` on `.41` |
-| Network | `.41` + `.42` in `.40` ufw |
-
----
-
-## Phase 1 — Node vault (VM `.40`)
+## Phase 1 — Infra stack (VM `.40`)
 
 > **Full runbook:** [vm-40-node-vault-plan.md](./vm-40-node-vault-plan.md)
 
-Besu IBFT, IPFS Cluster, port bind fix, ufw, contract deploy.
+1. Besu IBFT (`backend/blockchain-besu-ibft/docker`)
+2. IPFS cluster (`backend/ipfs-cluster-private`)
+3. Deploy contracts (`npm run deploy:lamteknik` via Docker)
+4. Gateway container (`API/docker compose up -d --build`)
 
-**Deliverable:** `.40` nodes healthy; artifacts on `.41`.
-
----
-
-## Phase 2 — LamTeknik Gateway (VM `.41`)
-
-> **Full runbook:** [vm-41-gateway-plan.md](./vm-41-gateway-plan.md)
-
-```bash
-cd API
-cp keys.json.example keys.json   # edit keys
-cp .env.example .env             # edit secrets
-docker compose up -d --build
-curl http://10.9.23.41:4100/health
-```
-
-**Deliverable:** Gateway healthy; researcher + CDC key tests pass.
+**Deliverable:** Gateway healthy on `:4100`; contracts deployed; IPFS cluster up.
 
 ---
 
-## Phase 3 — App + CDC (VM `.42`)
+## Phase 2 — App + CDC (VM `.42`)
 
 ```env
-API_ENDPOINT=http://10.9.23.41:4100
-API_KEY=sk-lamtek-cdc-internal
+API_ENDPOINT=http://10.9.23.40:4100
+API_KEY=
 IPFS_CLUSTER_REST_URL=http://10.9.23.40:9094
 ```
 
-**Deliverable:** CDC end-to-end through gateway.
+**Deliverable:** CDC end-to-end through gateway on `.40`; files to IPFS on `.40`.
 
 ---
 
-## Phase 4 — Integration testing
+## Phase 3 — Integration testing
 
-1. Gateway health + auth (401 without key)
-2. Researcher entity scope (403 on disallowed entity)
-3. CDC row change → on-chain verify
-4. IPFS file column via direct `.40:9094`
-5. Admin deploy via `POST /deploy/lamteknik`
-
----
-
-## Phase 5 — Hardening (optional)
-
-| Task | Detail |
-|------|--------|
-| HTTPS | Caddy → `:4100` |
-| Audit log | `AUDIT_LOG_ENABLED=true` |
-| Rate limits | `express-rate-limit` per key |
-| Monitoring | Prometheus scrape `/health` |
+1. Gateway health on `.40:4100`
+2. Entity read/write without API key
+3. CDC row change → on-chain verify via `.40:4100`
+4. IPFS file column via `.40:9094` or gateway `/ipfs/upload`
+5. Cross-VM test from `.42`
 
 ---
 
@@ -230,11 +114,11 @@ IPFS_CLUSTER_REST_URL=http://10.9.23.40:9094
 
 | # | Task | Host | Status |
 |---|------|------|--------|
-| 1 | Besu + IPFS up | `.40` | ☐ |
-| 2 | IPFS ports + ufw | `.40` | ☐ |
-| 3 | Contracts deployed | `.40` / `API` | ☐ |
-| 4 | Gateway code (auth, queue, IPFS) | `API/` | ✅ |
-| 5 | Gateway Docker on `.41` | `.41` | ☐ |
+| 1 | Besu up | `.40` | ✅ |
+| 2 | IPFS cluster up | `.40` | ✅ |
+| 3 | Contracts deployed | `.40` | ✅ |
+| 4 | Gateway Docker on `.40` | `.40` | ✅ |
+| 5 | Gateway code | `API/` | ✅ |
 | 6 | App + CDC on `.42` | `.42` | ☐ |
 | 7 | End-to-end smoke test | all | ☐ |
 
@@ -244,21 +128,16 @@ IPFS_CLUSTER_REST_URL=http://10.9.23.40:9094
 
 | Date | Decision |
 |------|----------|
-| 2026-08-11 | Drop Hyperledger FireFly |
-| 2026-08-11 | Server `.40` = nodes; Server `.41` = gateway |
-| 2026-08-11 | CDC co-located with MySQL |
-| 2026-09-03 | Custom Express gateway confirmed |
-| 2026-09-03 | **Drop Kong** — Express handles `x-api-key` directly; SSH + `keys.json` for key admin |
-| 2026-09-03 | Signing queue + nonce manager required (Cardoso 2025, EthConnect pattern) |
-| 2026-09-03 | No raw JSON-RPC passthrough; entity REST only (BAF pattern) |
-| 2026-09-03 | Fabric multi-backend deferred; Besu-only now |
-| 2026-09-03 | Deploy via API = admin keys only; node ops = SSH only |
+| 2026-09-04 | **Unified `.40`:** Besu + IPFS + Gateway on one VM; open dev API; no ufw |
+| 2026-09-04 | **Deprecated `.41`:** IPFS vault split removed for simplicity |
+| 2026-09-03 | Custom Express gateway; Kong rejected |
+| 2026-09-03 | Topology split `.40`/`.41` *(superseded 2026-09-04)* |
 
 ---
 
 ## References
 
 - [infrastructure.md](./infrastructure.md)
-- [vm-41-gateway-plan.md](./vm-41-gateway-plan.md)
+- [vm-40-node-vault-plan.md](./vm-40-node-vault-plan.md)
 - [`API/command/how-to-blockchain-api.md`](../API/command/how-to-blockchain-api.md)
 - [`API/command/how-to-ipfs-api.md`](../API/command/how-to-ipfs-api.md)
