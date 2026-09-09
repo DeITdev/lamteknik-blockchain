@@ -38,6 +38,18 @@ backend/blockchain-besu-ibft/Node-*/data/besu.ports
 backend/blockchain-besu-ibft/Node-*/data/caches/
 backend/blockchain-besu-ibft/Node-*/data/database/
 
+# Go Ethereum runtime data
+backend/go-ethereum/data/
+
+# Hyperledger Fabric bootstrap and runtime data
+backend/hyperledger-fabric/fabric-samples/
+backend/hyperledger-fabric/bin/
+backend/hyperledger-fabric/config/
+backend/hyperledger-fabric/install-fabric.sh
+backend/hyperledger-fabric/docker/explorer/organizations/
+backend/hyperledger-fabric/docker/explorer/walletstore/
+!backend/hyperledger-fabric/docker/.env
+
 # ipfs cluster runtime data
 backend/ipfs-cluster-private/compose/
 backend/ipfs-cluster-private/swarm.key
@@ -64,3 +76,6 @@ target/backend/dist/
 frontend/lamteknik-web/node_modules/
 frontend/lamteknik-web/.next/
 frontend/lamteknik-web/.env.local
+
+# images
+image/

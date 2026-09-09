@@ -6,6 +6,5 @@ services:
     env_file:
       - .env
     volumes:
-      - ./build/contracts/lamteknik:/app/build/contracts/lamteknik:ro
-      - ./build/lamteknik-deployments.json:/app/build/lamteknik-deployments.json:ro
+      - ./build/chains:/app/build/chains
     restart: unless-stopped

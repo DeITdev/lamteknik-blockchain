@@ -1,14 +1,16 @@
 {
   "name": "lamteknik-blockchain-api",
   "version": "1.0.0",
-  "description": "LamTeknik blockchain API using Hyperledger Besu",
+  "description": "LamTeknik multi-blockchain API gateway for Besu and Go Ethereum",
   "main": "server-lamteknik.js",
   "type": "module",
   "scripts": {
     "start": "node server-lamteknik.js",
     "dev": "nodemon server-lamteknik.js",
     "compile": "hardhat --config ./hardhat.config.js compile",
-    "deploy:lamteknik": "hardhat --config ./hardhat.config.js run ./scripts/deploy-lamteknik.js --network besu"
+    "deploy:lamteknik": "npm run deploy:besu",
+    "deploy:besu": "BLOCKCHAIN_TARGET=besu hardhat --config ./hardhat.config.js run ./scripts/deploy-lamteknik.js --network besu",
+    "deploy:go-ethereum": "BLOCKCHAIN_TARGET=go-ethereum hardhat --config ./hardhat.config.js run ./scripts/deploy-lamteknik.js --network geth"
   },
   "dependencies": {
     "cors": "^2.8.5",

@@ -25,6 +25,8 @@ flowchart LR
 
   subgraph backend [backend/]
     Besu[Besu IBFT :8545]
+    Geth[Geth dev chain :8555]
+    Fabric[Hyperledger Fabric]
     IPFS[IPFS Cluster :9094]
   end
 
@@ -64,6 +66,8 @@ The on-chain CDC envelope (all entities):
 | Folder | Role |
 |---|---|
 | [`backend/blockchain-besu-ibft/`](../backend/blockchain-besu-ibft/) | 4-node private Besu IBFT network |
+| [`backend/go-ethereum/`](../backend/go-ethereum/) | Single-node Geth development chain with Chainlens explorer |
+| [`backend/hyperledger-fabric/`](../backend/hyperledger-fabric/) | Two-organization Fabric test network with Hyperledger Explorer |
 | [`backend/ipfs-cluster-private/`](../backend/ipfs-cluster-private/) | Private IPFS Cluster (4 peers) |
 | [`API/`](../API/) | Express REST API + Solidity `*Storage` contracts |
 | [`connection/`](../connection/) | Kafka, Debezium, CDC consumer |
@@ -74,7 +78,7 @@ The on-chain CDC envelope (all entities):
 
 ## Developer flow
 
-1. Start Besu and IPFS cluster (`backend/`).
+1. Start the selected blockchain backend and IPFS cluster (`backend/`); run only one blockchain backend at a time.
 2. Deploy smart contracts and run the LamTeknik API (`API/`).
 3. Start Kafka + Debezium (`connection/kafka-debezium/`).
 4. Configure and register a Debezium connector for the source DB (`connection/consumer-lamteknik/`).
@@ -86,6 +90,8 @@ The on-chain CDC envelope (all entities):
 ### Implemented
 
 - Besu IBFT 4-node network with genesis and run guides
+- Geth development chain and Chainlens stack (transferred; not yet API-integrated)
+- Hyperledger Fabric test network and Explorer stack (transferred; not yet API-integrated)
 - IPFS private cluster with replication
 - 26 LamTeknik `*Storage` smart contracts + auto-generated REST routes
 - Kafka + Debezium Connect stack (Docker)

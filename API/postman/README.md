@@ -4,8 +4,8 @@ Importable Postman collection + environment for [API/server-lamteknik.js](../ser
 
 Files in this folder:
 
-- `LamTeknik.postman_collection.json` - 3 diagnostic requests + 8 entity-templated requests
-- `LamTeknik.postman_environment.json` - environment variables (`baseUrl`, `entity`, `recordId`, ...)
+- `LamTeknik.postman_collection.json` - separate Besu and Go Ethereum diagnostic/entity folders
+- `LamTeknik.postman_environment.json` - shared payload values plus explicit `besuPath` and `gethPath` namespaces
 
 ## Import (3 steps)
 
@@ -23,7 +23,7 @@ npm run deploy:lamteknik   # if not already deployed
 npm run start              # http://localhost:4100
 ```
 
-Then in Postman, run **Diagnostics -> GET /health** to confirm connectivity.
+Then run **Blockchain Go Ethereum -> Diagnostics -> GET Go Ethereum health** to confirm the active Geth target. Besu requests remain available but report unhealthy while Besu is stopped.
 
 ## Valid entity slugs
 
@@ -39,7 +39,7 @@ provinsi, respon-asesor, sekretariat, tenant, upps, user, validator
 
 ## About `privateKey`
 
-Optional. Leave the env variable empty to let the collection's pre-request script strip it from the POST body so the server signs with `DEPLOYER_PRIVATE_KEY` / `DEFAULT_PRIVATE_KEY` from `API/.env`. Set it explicitly if you want to sign as a different account per request.
+Optional. Leave the env variable empty. Besu then uses its configured gateway key; Go Ethereum uses its local node-managed developer account. Set it explicitly only for a funded account on the selected target.
 
 ## About `allData`
 

@@ -1,0 +1,11 @@
+# Bootstrap artifacts (install-fabric.sh)
+fabric-samples/
+bin/
+config/
+install-fabric.sh
+
+# Runtime crypto copied from test-network
+docker/explorer/organizations/
+
+# Explorer wallet store (Docker named volume backup path if mounted locally)
+docker/explorer/walletstore/

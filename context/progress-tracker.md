@@ -11,6 +11,7 @@ Update this file after every meaningful implementation change.
 - Wire nginx to `:4100` (external).
 - Deploy app + CDC on `.42` per [revamp-system-plan.md](./revamp-system-plan.md) Phase 2.
 - Validate end-to-end CDC smoke test.
+- Run the transferred Geth and Hyperledger Fabric stacks one at a time, then integrate each with the API.
 
 ---
 
@@ -20,6 +21,8 @@ Update this file after every meaningful implementation change.
 
 - **Besu IBFT** — 4-node network under `backend/blockchain-besu-ibft/` with Docker compose and run guide.
 - **IPFS Cluster** — private 4-peer cluster under `backend/ipfs-cluster-private/` with swarm key, scripts, and run guide.
+- **Geth development stack** — single-node `--dev` chain, Chainlens explorer, runbook, and reset script under `backend/go-ethereum/`; transferred from `repo/blockchain-compare/`, pending runtime validation and API integration.
+- **Hyperledger Fabric stack** — Fabric test-network bootstrap/up/down/reset scripts, unified Compose stack, and Hyperledger Explorer under `backend/hyperledger-fabric/`; transferred from `repo/blockchain-compare/`, pending runtime validation and API integration.
 
 ### Blockchain API (`API/`)
 
@@ -47,6 +50,7 @@ Update this file after every meaningful implementation change.
 
 - nginx public URL (external setup).
 - VM `.42` app + CDC deployment.
+- Besu API runtime validation when Besu is next started.
 
 ---
 
@@ -69,3 +73,5 @@ Update this file after every meaningful implementation change.
 ## Session Notes
 
 - 2026-09-04: Plan revised — single VM infra stack, open API, no ufw/nginx in repo scope.
+- 2026-09-09: Geth development stack started successfully with loopback-only RPC at `127.0.0.1:8555` and Chainlens at `http://127.0.0.1:8082`. Geth and Chainlens are isolated from Besu; API integration remains deferred. Chainlens MongoDB uses `mongo:4.4` because this VM lacks the AVX instructions required by MongoDB 5.0.
+- 2026-09-09: Gateway now exposes separate Besu (`/blockchains/besu`) and Go Ethereum (`/blockchains/go-ethereum`) targets with isolated artifact directories and signing paths. All 26 LamTeknik contracts were deployed to Geth; a Go-Ethereum namespace POST/GET smoke test passed. Besu remains stopped and unmodified.

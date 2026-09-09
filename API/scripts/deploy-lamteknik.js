@@ -11,7 +11,7 @@ const MODULE_NAME = "LamTeknik";
 const CONTRACTS_SUBDIR = "contracts";
 const REGISTRY_PREFIX = `${MODULE_NAME}:`;
 const BUILD_SUBDIR = MODULE_NAME.toLowerCase();
-const MANIFEST_FILENAME = `${BUILD_SUBDIR}-deployments.json`;
+const TARGETS = new Set(["besu", "go-ethereum"]);
 
 function ensureDir(dirPath) {
   fs.mkdirSync(dirPath, { recursive: true });
@@ -64,6 +64,8 @@ function parseListEnv(value) {
 }
 
 async function main() {
+  const target = process.env.BLOCKCHAIN_TARGET || "besu";
+  if (!TARGETS.has(target)) throw new Error(`Unsupported BLOCKCHAIN_TARGET: ${target}`);
   const connection = await network.connect();
   const ethers = connection?.ethers;
   if (!ethers) {
@@ -75,8 +77,8 @@ async function main() {
     );
   }
 
-  const chainId = Number(process.env.BESU_CHAIN_ID || 1337);
-  const buildDir = path.join(__dirname, "..", "build", "contracts", BUILD_SUBDIR);
+  const chainId = Number(target === "go-ethereum" ? (process.env.GETH_CHAIN_ID || process.env.CHAIN_ID || 1337) : (process.env.BESU_CHAIN_ID || process.env.CHAIN_ID || 1337));
+  const buildDir = path.join(__dirname, "..", "build", "chains", target, "contracts", BUILD_SUBDIR);
   ensureDir(buildDir);
 
   const forceRedeploy = process.env.FORCE_REDEPLOY === "true";
@@ -88,6 +90,7 @@ async function main() {
     throw new Error("No deployer account available. Set DEPLOYER_PRIVATE_KEY in API/.env (or shell env).");
   }
 
+  console.log(`Target:    ${target}`);
   console.log(`Module:    ${MODULE_NAME}`);
   console.log(`Deployer:  ${deployer.address}`);
   console.log(`Chain ID:  ${chainId}`);
@@ -196,7 +199,8 @@ async function main() {
     });
   }
 
-  const manifestPath = path.join(__dirname, "..", "build", MANIFEST_FILENAME);
+  const manifestPath = path.join(__dirname, "..", "build", "chains", target, `${BUILD_SUBDIR}-deployments.json`);
+  ensureDir(path.dirname(manifestPath));
   const deployedContracts = {};
 
   for (const file of fs.readdirSync(buildDir)) {
@@ -213,8 +217,9 @@ async function main() {
     JSON.stringify(
       {
         module: MODULE_NAME,
+        target,
         chainId,
-        rpcUrl: process.env.BESU_RPC_URL || "http://localhost:8545",
+        rpcUrl: process.env.BLOCKCHAIN_RPC_URL || (target === "go-ethereum" ? process.env.GETH_RPC_URL || "http://127.0.0.1:8555" : process.env.BESU_RPC_URL || "http://localhost:8545"),
         contractRegistry: registryAddress,
         contracts: deployedContracts,
         generatedAt: new Date().toISOString(),
