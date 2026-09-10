@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "a7c2d3e4-5f6a-7b8c-9d0e-lamteknik0003",
     "name": "LamTeknik Multi-Blockchain API",
-    "description": "Besu and Go Ethereum are explicit gateway targets. Contracts and records never cross targets, even though both local development chains use chain ID 1337. Select the LamTeknik (local multi-blockchain) environment.",
+    "description": "Besu, Go Ethereum, and Hyperledger Fabric are explicit gateway targets. Records never cross targets: Fabric calls the lamteknik-ledger chaincode, while Besu and Go Ethereum use their own EVM contracts. Select the LamTeknik (local multi-blockchain) environment.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "event": [{
@@ -44,6 +44,25 @@
           {"name": "GET Go Ethereum entity", "request": {"method": "GET", "url": "{{baseUrl}}{{gethPath}}/lamteknik/{{entity}}"}},
           {"name": "GET Go Ethereum entity count", "request": {"method": "GET", "url": "{{baseUrl}}{{gethPath}}/lamteknik/{{entity}}/count"}},
           {"name": "POST Go Ethereum entity", "request": {"method": "POST", "header": [{"key": "Content-Type", "value": "application/json"}], "body": {"mode": "raw", "raw": "{\n  \"recordId\": \"{{recordId}}\",\n  \"createdTimestamp\": {{createdTimestamp}},\n  \"modifiedTimestamp\": {{modifiedTimestamp}},\n  \"modifiedBy\": \"{{modifiedBy}}\",\n  \"allData\": {{allDataJson}},\n  \"privateKey\": \"{{privateKey}}\"\n}"}, "url": "{{baseUrl}}{{gethPath}}/lamteknik/{{entity}}"}}
+        ]}
+      ]
+    },
+    {
+      "name": "Hyperledger Fabric",
+      "item": [
+        {"name": "Diagnostics", "item": [
+          {"name": "GET Fabric health", "request": {"method": "GET", "url": "{{baseUrl}}{{fabricPath}}/health"}},
+          {"name": "GET Fabric entities", "request": {"method": "GET", "url": "{{baseUrl}}{{fabricPath}}/lamteknik"}},
+          {"name": "GET Fabric chaincode", "request": {"method": "GET", "url": "{{baseUrl}}{{fabricPath}}/contracts"}}
+        ]},
+        {"name": "Entity", "item": [
+          {"name": "GET Fabric entity", "request": {"method": "GET", "url": "{{baseUrl}}{{fabricPath}}/lamteknik/{{entity}}"}},
+          {"name": "GET Fabric entity count", "request": {"method": "GET", "url": "{{baseUrl}}{{fabricPath}}/lamteknik/{{entity}}/count"}},
+          {"name": "GET Fabric entity IDs", "request": {"method": "GET", "url": "{{baseUrl}}{{fabricPath}}/lamteknik/{{entity}}/ids"}},
+          {"name": "GET Fabric record", "request": {"method": "GET", "url": "{{baseUrl}}{{fabricPath}}/lamteknik/{{entity}}/{{recordId}}"}},
+          {"name": "GET Fabric record metadata", "request": {"method": "GET", "url": "{{baseUrl}}{{fabricPath}}/lamteknik/{{entity}}/{{recordId}}/metadata"}},
+          {"name": "GET Fabric record exists", "request": {"method": "GET", "url": "{{baseUrl}}{{fabricPath}}/lamteknik/{{entity}}/{{recordId}}/exists"}},
+          {"name": "POST Fabric entity", "request": {"method": "POST", "header": [{"key": "Content-Type", "value": "application/json"}], "body": {"mode": "raw", "raw": "{\n  \"recordId\": \"{{recordId}}\",\n  \"createdTimestamp\": {{createdTimestamp}},\n  \"modifiedTimestamp\": {{modifiedTimestamp}},\n  \"modifiedBy\": \"{{modifiedBy}}\",\n  \"allData\": {{allDataJson}}\n}"}, "url": "{{baseUrl}}{{fabricPath}}/lamteknik/{{entity}}"}}
         ]}
       ]
     }
