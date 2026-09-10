@@ -14,11 +14,14 @@ networks:
   hyperledger-fabric:
     name: hyperledger-fabric
     driver: bridge
+    ipam:
+      config:
+        - subnet: 172.16.241.0/24
 
 services:
   orderer.example.com:
     container_name: orderer.example.com
-    image: hyperledger/fabric-orderer:latest
+    image: hyperledger/fabric-orderer:${FABRIC_IMAGE_TAG:-2.5.12}
     labels:
       service: hyperledger-fabric
     environment:
@@ -51,16 +54,17 @@ services:
       - ../fabric-samples/test-network/organizations/ordererOrganizations/example.com/orderers/orderer.example.com/tls/:/var/hyperledger/orderer/tls
       - orderer.example.com:/var/hyperledger/production/orderer
     ports:
-      - "7050:7050"
-      - "7053:7053"
-      - "9443:9443"
+      - "127.0.0.1:7050:7050"
+      - "127.0.0.1:7053:7053"
+      - "127.0.0.1:9443:9443"
     networks:
       - hyperledger-fabric
     restart: unless-stopped
+    mem_limit: 384m
 
   peer0.org1.example.com:
     container_name: peer0.org1.example.com
-    image: hyperledger/fabric-peer:latest
+    image: hyperledger/fabric-peer:${FABRIC_IMAGE_TAG:-2.5.12}
     labels:
       service: hyperledger-fabric
     environment:
@@ -94,15 +98,16 @@ services:
     working_dir: /root
     command: peer node start
     ports:
-      - "7051:7051"
-      - "9444:9444"
+      - "127.0.0.1:7051:7051"
+      - "127.0.0.1:9444:9444"
     networks:
       - hyperledger-fabric
     restart: unless-stopped
+    mem_limit: 512m
 
   peer0.org2.example.com:
     container_name: peer0.org2.example.com
-    image: hyperledger/fabric-peer:latest
+    image: hyperledger/fabric-peer:${FABRIC_IMAGE_TAG:-2.5.12}
     labels:
       service: hyperledger-fabric
     environment:
@@ -136,16 +141,17 @@ services:
     working_dir: /root
     command: peer node start
     ports:
-      - "9051:9051"
-      - "9445:9445"
+      - "127.0.0.1:9051:9051"
+      - "127.0.0.1:9445:9445"
     networks:
       - hyperledger-fabric
     restart: unless-stopped
+    mem_limit: 512m
 
   explorerdb.mynetwork.com:
     container_name: explorerdb.mynetwork.com
     hostname: explorerdb.mynetwork.com
-    image: ghcr.io/hyperledger-labs/explorer-db:latest
+    image: ghcr.io/hyperledger-labs/explorer-db:${EXPLORER_IMAGE_TAG:-2.0.0}
     environment:
       - DATABASE_DATABASE=fabricexplorer
       - DATABASE_USERNAME=hppoc
@@ -160,11 +166,12 @@ services:
     networks:
       - hyperledger-fabric
     restart: unless-stopped
+    mem_limit: 384m
 
   explorer.mynetwork.com:
     container_name: explorer.mynetwork.com
     hostname: explorer.mynetwork.com
-    image: ghcr.io/hyperledger-labs/explorer:latest
+    image: ghcr.io/hyperledger-labs/explorer:${EXPLORER_IMAGE_TAG:-2.0.0}
     depends_on:
       explorerdb.mynetwork.com:
         condition: service_healthy
@@ -182,14 +189,15 @@ services:
       - LOG_LEVEL_CONSOLE=debug
       - LOG_CONSOLE_STDOUT=true
       - DISCOVERY_AS_LOCALHOST=false
-      - PORT=${PORT:-8090}
+      - PORT=${EXPLORER_PORT:-8091}
     volumes:
       - ${EXPLORER_CONFIG_FILE_PATH}:/opt/explorer/app/platform/fabric/config.json
       - ${EXPLORER_PROFILE_DIR_PATH}:/opt/explorer/app/platform/fabric/connection-profile
       - ${FABRIC_CRYPTO_PATH}:/tmp/crypto
       - explorer-walletstore:/opt/explorer/wallet
     ports:
-      - "${PORT:-8090}:${PORT:-8090}"
+      - "${EXPLORER_BIND_ADDRESS:-127.0.0.1}:${EXPLORER_PORT:-8091}:${EXPLORER_PORT:-8091}"
     networks:
       - hyperledger-fabric
     restart: unless-stopped
+    mem_limit: 512m

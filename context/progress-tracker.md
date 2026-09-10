@@ -22,7 +22,7 @@ Update this file after every meaningful implementation change.
 - **Besu IBFT** — 4-node network under `backend/blockchain-besu-ibft/` with Docker compose and run guide.
 - **IPFS Cluster** — private 4-peer cluster under `backend/ipfs-cluster-private/` with swarm key, scripts, and run guide.
 - **Geth development stack** — single-node `--dev` chain, Chainlens explorer, runbook, and reset script under `backend/go-ethereum/`; transferred from `repo/blockchain-compare/`, pending runtime validation and API integration.
-- **Hyperledger Fabric stack** — Fabric test-network bootstrap/up/down/reset scripts, unified Compose stack, and Hyperledger Explorer under `backend/hyperledger-fabric/`; transferred from `repo/blockchain-compare/`, pending runtime validation and API integration.
+- **Hyperledger Fabric stack** — isolated Fabric 2.5.12 orderer/two-peer network under `backend/hyperledger-fabric/`, using subnet `172.16.241.0/24`, localhost-only node ports, Explorer `:8091`, and the deployed `lamteknik-ledger` Fabric chaincode on `mychannel`. Fabric has a dedicated gateway namespace at `/blockchains/hyperledger-fabric`; final Explorer/API smoke validation remains in progress.
 
 ### Blockchain API (`API/`)
 

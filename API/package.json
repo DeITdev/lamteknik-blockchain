@@ -13,6 +13,8 @@
     "deploy:go-ethereum": "BLOCKCHAIN_TARGET=go-ethereum hardhat --config ./hardhat.config.js run ./scripts/deploy-lamteknik.js --network geth"
   },
   "dependencies": {
+    "@grpc/grpc-js": "^1.12.6",
+    "@hyperledger/fabric-gateway": "^1.7.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "ethers": "^6.13.4",

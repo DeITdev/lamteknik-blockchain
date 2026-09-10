@@ -8,9 +8,15 @@ TEST_NETWORK_DIR="${ROOT_DIR}/fabric-samples/test-network"
 EXPLORER_DIR="${DOCKER_DIR}/explorer"
 CHANNEL_NAME="${FABRIC_CHANNEL:-mychannel}"
 FABRIC_NETWORK="${FABRIC_DOCKER_NETWORK:-hyperledger-fabric}"
+EXPLORER_PORT="${EXPLORER_PORT:-8091}"
+CHAINCODE_NAME="${FABRIC_CHAINCODE_NAME:-lamteknik-ledger}"
+CHAINCODE_PATH="${ROOT_DIR}/chaincode/lamteknik-ledger"
+FABRIC_IMAGE_TAG="${FABRIC_IMAGE_TAG:-2.5.12}"
+FABRIC_CA_IMAGE_TAG="${FABRIC_CA_IMAGE_TAG:-1.5.12}"
 FABRIC_NODES=(orderer.example.com peer0.org1.example.com peer0.org2.example.com)
 
 export PATH="${ROOT_DIR}/fabric-samples/bin:${ROOT_DIR}/bin:${PATH}"
+[[ -x "${ROOT_DIR}/tools/go/bin/go" ]] && export PATH="${ROOT_DIR}/tools/go/bin:${PATH}"
 export FABRIC_CFG_PATH="${ROOT_DIR}/fabric-samples/config"
 
 compose() {
@@ -73,16 +79,11 @@ container_running() {
 }
 
 stop_legacy_compose_stacks() {
-  echo "Stopping legacy Fabric compose projects (test-network, explorer)..."
-  docker compose -p explorer down --remove-orphans 2>/dev/null || true
+  echo "Stopping transient Fabric test-network containers..."
   if [[ -f "${TEST_NETWORK_DIR}/compose/compose-test-net.yaml" ]]; then
     cd "${TEST_NETWORK_DIR}"
     compose -f compose/compose-test-net.yaml -f compose/docker/docker-compose-test-net.yaml down --remove-orphans 2>/dev/null || true
     compose -f compose/compose-ca.yaml down --remove-orphans 2>/dev/null || true
-  fi
-  if [[ -f "${EXPLORER_DIR}/docker-compose.yml" ]]; then
-    cd "${EXPLORER_DIR}"
-    docker compose down --remove-orphans 2>/dev/null || true
   fi
   docker network rm fabric_test 2>/dev/null || true
 }
@@ -98,7 +99,7 @@ start_explorer_services() {
   cd "${DOCKER_DIR}"
   compose up -d explorerdb.mynetwork.com explorer.mynetwork.com
   echo
-  echo "Explorer UI: http://localhost:8090"
+  echo "Explorer UI: http://127.0.0.1:${EXPLORER_PORT}"
 }
 
 wait_for_fabric_nodes() {
@@ -145,12 +146,19 @@ wait_for_fabric_nodes() {
 
 start_test_network() {
   cd "${TEST_NETWORK_DIR}"
-  MSYS_NO_PATHCONV=1 DOCKER_SOCK=/var/run/docker.sock ./network.sh up -ca || true
+  MSYS_NO_PATHCONV=1 DOCKER_SOCK=/var/run/docker.sock ./network.sh up -ca -i "${FABRIC_IMAGE_TAG}" -cai "${FABRIC_CA_IMAGE_TAG}"
   stop_legacy_compose_stacks
   start_fabric_nodes
   wait_for_fabric_nodes
   cd "${TEST_NETWORK_DIR}"
   ./network.sh createChannel -ca -c "${CHANNEL_NAME}"
+}
+
+deploy_chaincode() {
+  [[ -f "${CHAINCODE_PATH}/go.mod" ]] || die "LamTeknik chaincode not found at ${CHAINCODE_PATH}"
+  cd "${TEST_NETWORK_DIR}"
+  echo "Deploying Fabric smart contract '${CHAINCODE_NAME}' to ${CHANNEL_NAME}..."
+  ./network.sh deployCC -c "${CHANNEL_NAME}" -ccn "${CHAINCODE_NAME}" -ccp "${CHAINCODE_PATH}" -ccl go -ccv 1.0 -ccs 1
 }
 
 preflight() {
@@ -159,14 +167,15 @@ preflight() {
   ensure_jq
 
   [[ -f "${TEST_NETWORK_DIR}/network.sh" ]] || die "test-network not found. Run: ${SCRIPT_DIR}/bootstrap-fabric.sh"
+  command -v go >/dev/null 2>&1 || die "Go is required to package the LamTeknik chaincode. Run: ${SCRIPT_DIR}/bootstrap-fabric.sh"
   [[ -f "${DOCKER_DIR}/docker-compose.yml" ]] || die "docker-compose.yml not found at ${DOCKER_DIR}"
 
-  for port in 7050 7051 9051 8090; do
+  for port in 7050 7051 7053 9051 9443 9444 9445 "${EXPLORER_PORT}"; do
     check_port_free "${port}" || die "Port ${port} is in use. Stop other backends (Besu/Geth/Fabric) first."
   done
 
-  if docker ps --format '{{.Names}}' | grep -qE '^(geth-dev|ibft-node-1|peer0\.org1\.example\.com)$'; then
-    echo "WARNING: Another blockchain stack may be running. Only one backend should run at a time."
+  if docker ps --format '{{.Names}}' | grep -qE '^(geth-dev|ibft-node-[1-4])$'; then
+    die "Besu or Go Ethereum is still running. Stop it before starting Fabric."
   fi
 }
 
@@ -181,8 +190,17 @@ sync_organizations() {
   cp -r "${src}" "${dst}"
 }
 
+make_crypto_readable() {
+  # Fabric CA containers generate private keys as root. The API gateway and
+  # Explorer mount this local-development material read-only as an unprivileged user.
+  docker run --rm -v "${TEST_NETWORK_DIR}/organizations:/crypto" alpine:3.20 chmod -R a+rX /crypto >/dev/null
+}
+
 patch_connection_profile() {
-  local profile="${EXPLORER_DIR}/connection-profile/test-network.json"
+  local profile_dir="${EXPLORER_DIR}/runtime-connection-profile"
+  local profile="${profile_dir}/test-network.json"
+  mkdir -p "${profile_dir}"
+  cp "${EXPLORER_DIR}/connection-profile/test-network.json" "${profile}"
   local user_msp="${EXPLORER_DIR}/organizations/peerOrganizations/org1.example.com/users/User1@org1.example.com/msp"
   local keystore_dir="${user_msp}/keystore"
   local signcerts_dir="${user_msp}/signcerts"
@@ -249,7 +267,9 @@ main() {
 
   echo "=== Starting Fabric stack (project: hyperledger-fabric, channel: ${CHANNEL_NAME}) ==="
   start_test_network
+  deploy_chaincode
 
+  make_crypto_readable
   sync_organizations
   patch_connection_profile
   wait_for_fabric_network
@@ -260,7 +280,7 @@ main() {
   echo "  Orderer:  localhost:7050"
   echo "  Org1 peer: localhost:7051"
   echo "  Org2 peer: localhost:9051"
-  echo "  Explorer: http://localhost:8090"
+  echo "  Explorer: http://127.0.0.1:${EXPLORER_PORT}"
   echo
   echo "  docker compose -p hyperledger-fabric ps"
   echo "Stop: ${SCRIPT_DIR}/down-fabric.sh"

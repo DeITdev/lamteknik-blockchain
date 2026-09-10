@@ -7,4 +7,5 @@ services:
       - .env
     volumes:
       - ./build/chains:/app/build/chains
+      - ../backend/hyperledger-fabric/docker/explorer/organizations:/fabric/organizations:ro
     restart: unless-stopped

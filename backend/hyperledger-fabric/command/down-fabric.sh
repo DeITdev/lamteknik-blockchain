@@ -15,10 +15,6 @@ if [[ -f "${DOCKER_DIR}/docker-compose.yml" ]]; then
   MSYS_NO_PATHCONV=1 docker compose down --remove-orphans || true
 fi
 
-# Legacy compose projects (pre-unified layout)
-docker compose -p explorer down --remove-orphans 2>/dev/null || true
-docker compose -p compose down --remove-orphans 2>/dev/null || true
-
 if [[ -f "${TEST_NETWORK_DIR}/compose/compose-test-net.yaml" ]]; then
   echo "Stopping legacy test-network compose project..."
   cd "${TEST_NETWORK_DIR}"
