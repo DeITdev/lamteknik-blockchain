@@ -7,6 +7,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
 import { FabricGateway } from "./fabric-gateway.js";
+import { decodeStoredRecord } from "./record-decoder.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -93,7 +94,13 @@ function entityRouter(target, entity) {
   router.get("/count", async (_req, res) => { try { res.json({ success: true, target: target.id, entity: entitySlug, count: toJsonSafe(await contract[total]()) }); } catch (error) { fail(res, error); } });
   router.get("/ids", async (_req, res) => { try { res.json({ success: true, target: target.id, entity: entitySlug, ids: toJsonSafe(await contract[ids]()) }); } catch (error) { fail(res, error); } });
   router.get("/index/:i", async (req, res) => { try { res.json({ success: true, target: target.id, entity: entitySlug, index: Number(req.params.i), recordId: toJsonSafe(await contract[index](BigInt(req.params.i))) }); } catch (error) { fail(res, error); } });
-  router.get("/", async (_req, res) => { try { res.json({ success: true, target: target.id, entity: entitySlug, data: pickNamedResult(await contract.retrieve()) }); } catch (error) { fail(res, error); } });
+  router.get("/", async (_req, res) => {
+    try {
+      const recordIds = await contract[ids]();
+      const data = await Promise.all(recordIds.map(async (recordId) => decodeStoredRecord(await contract[get](recordId))));
+      res.json({ success: true, target: target.id, entity: entitySlug, data });
+    } catch (error) { fail(res, error); }
+  });
   router.get("/:recordId/metadata", async (req, res) => { try { res.json({ success: true, target: target.id, entity: entitySlug, recordId: req.params.recordId, data: pickNamedResult(await contract[getMeta](req.params.recordId)) }); } catch (error) { fail(res, error); } });
   router.get("/:recordId/exists", async (req, res) => { try { res.json({ success: true, target: target.id, entity: entitySlug, recordId: req.params.recordId, exists: Boolean(await contract[exists](req.params.recordId)) }); } catch (error) { fail(res, error); } });
   router.get("/:recordId", async (req, res) => { try { res.json({ success: true, target: target.id, entity: entitySlug, recordId: req.params.recordId, data: pickNamedResult(await contract[get](req.params.recordId)) }); } catch (error) { fail(res, error); } });

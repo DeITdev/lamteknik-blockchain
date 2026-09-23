@@ -26,7 +26,7 @@
           {"name": "GET Besu contracts", "request": {"method": "GET", "url": "{{baseUrl}}{{besuPath}}/contracts"}}
         ]},
         {"name": "Entity", "item": [
-          {"name": "GET Besu entity", "request": {"method": "GET", "url": "{{baseUrl}}{{besuPath}}/lamteknik/{{entity}}"}},
+          {"name": "GET Besu entity", "event": [{"listen": "test", "script": {"exec": ["pm.test(\"returns a decoded data array\", function () {", "  const body = pm.response.json();", "  pm.expect(body.success).to.eql(true);", "  pm.expect(body.data).to.be.an(\"array\");", "  if (body.data.length) pm.expect(body.data[0]).to.have.property(\"id\");", "});"]}}], "request": {"method": "GET", "url": "{{baseUrl}}{{besuPath}}/lamteknik/{{entity}}"}},
           {"name": "GET Besu entity count", "request": {"method": "GET", "url": "{{baseUrl}}{{besuPath}}/lamteknik/{{entity}}/count"}},
           {"name": "POST Besu entity", "request": {"method": "POST", "header": [{"key": "Content-Type", "value": "application/json"}], "body": {"mode": "raw", "raw": "{\n  \"recordId\": \"{{recordId}}\",\n  \"createdTimestamp\": {{createdTimestamp}},\n  \"modifiedTimestamp\": {{modifiedTimestamp}},\n  \"modifiedBy\": \"{{modifiedBy}}\",\n  \"allData\": {{allDataJson}},\n  \"privateKey\": \"{{privateKey}}\"\n}"}, "url": "{{baseUrl}}{{besuPath}}/lamteknik/{{entity}}"}}
         ]}
@@ -41,7 +41,7 @@
           {"name": "GET Go Ethereum contracts", "request": {"method": "GET", "url": "{{baseUrl}}{{gethPath}}/contracts"}}
         ]},
         {"name": "Entity", "item": [
-          {"name": "GET Go Ethereum entity", "request": {"method": "GET", "url": "{{baseUrl}}{{gethPath}}/lamteknik/{{entity}}"}},
+          {"name": "GET Go Ethereum entity", "event": [{"listen": "test", "script": {"exec": ["pm.test(\"returns a decoded data array\", function () {", "  const body = pm.response.json();", "  pm.expect(body.success).to.eql(true);", "  pm.expect(body.data).to.be.an(\"array\");", "  if (body.data.length) pm.expect(body.data[0]).to.have.property(\"id\");", "});"]}}], "request": {"method": "GET", "url": "{{baseUrl}}{{gethPath}}/lamteknik/{{entity}}"}},
           {"name": "GET Go Ethereum entity count", "request": {"method": "GET", "url": "{{baseUrl}}{{gethPath}}/lamteknik/{{entity}}/count"}},
           {"name": "POST Go Ethereum entity", "request": {"method": "POST", "header": [{"key": "Content-Type", "value": "application/json"}], "body": {"mode": "raw", "raw": "{\n  \"recordId\": \"{{recordId}}\",\n  \"createdTimestamp\": {{createdTimestamp}},\n  \"modifiedTimestamp\": {{modifiedTimestamp}},\n  \"modifiedBy\": \"{{modifiedBy}}\",\n  \"allData\": {{allDataJson}},\n  \"privateKey\": \"{{privateKey}}\"\n}"}, "url": "{{baseUrl}}{{gethPath}}/lamteknik/{{entity}}"}}
         ]}

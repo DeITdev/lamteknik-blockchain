@@ -7,6 +7,7 @@
   "scripts": {
     "start": "node server-lamteknik.js",
     "dev": "nodemon server-lamteknik.js",
+    "test": "node --test",
     "compile": "hardhat --config ./hardhat.config.js compile",
     "deploy:lamteknik": "npm run deploy:besu",
     "deploy:besu": "BLOCKCHAIN_TARGET=besu hardhat --config ./hardhat.config.js run ./scripts/deploy-lamteknik.js --network besu",
