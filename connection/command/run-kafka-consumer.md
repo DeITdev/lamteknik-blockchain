@@ -1,97 +1,59 @@
-# Run Kafka Consumer
+# Run the LamTeknik multi-network CDC consumers (VM `.41`)
 
-Start the LamTeknik CDC consumer that reads Debezium events and writes to blockchain + IPFS.
+The Portainer stack at [`../consumer-lamteknik/portainer-stack.yml`](../consumer-lamteknik/portainer-stack.yml) deploys all three consumers to the existing external `kafka_net`. They consume the same `lamteknik.lamtek_db.akreditasi` topic using separate consumer groups, but each writes only through its own explicit gateway namespace.
 
-## Prerequisites
-
-Run these **before** starting the consumer:
-
-| # | Component | Guide |
+| Container | Kafka group | Gateway route |
 |---|---|---|
-| 1 | Besu IBFT Node-1 | [`backend/blockchain-besu-ibft/command/run-besu-ibft.md`](../../backend/blockchain-besu-ibft/command/run-besu-ibft.md) |
-| 2 | Smart contracts deployed | `cd API && npm run deploy:lamteknik` |
-| 3 | LamTeknik API | `cd API && npm run dev` → http://localhost:4100 |
-| 4 | IPFS cluster (if file columns) | [`backend/ipfs-cluster-private/command/run-ipfs-private.md`](../../backend/ipfs-cluster-private/command/run-ipfs-private.md) |
-| 5 | Kafka + Debezium | [`run-kafka-debezium.md`](run-kafka-debezium.md) |
-| 6 | Connector registered | [`configure-cdc.md`](configure-cdc.md) |
+| `consumer-lamteknik-besu` | `lamteknik-cdc-besu` | `/blockchains/besu/lamteknik/akreditasi` |
+| `consumer-lamteknik-goeth` | `lamteknik-cdc-go-ethereum` | `/blockchains/go-ethereum/lamteknik/akreditasi` |
+| `consumer-lamteknik-fabric` | `lamteknik-cdc-hyperledger-fabric` | `/blockchains/hyperledger-fabric/lamteknik/akreditasi` |
 
-## Install and configure
+The consumer never accepts or sends a private key. The `.40` gateway is the only transaction signer.
 
-```bash
-cd connection/consumer-lamteknik
-npm install
-cp .env.example .env.local
-# Edit .env.local — DB credentials, TARGET_TABLES, API_ENDPOINT
-```
+## Besu single-event verification
 
-Optional: copy table mapping overrides:
+1. Before deploying or enabling CDC, fix Besu RPC reachability at `.40:8545`, then require a healthy response:
 
-```bash
-cp config/table-mapping.example.json config/table-mapping.json
-```
+   ```bash
+   curl -fsS http://10.9.23.40:4100/blockchains/besu/health
+   curl -fsS http://10.9.23.40:4100/blockchains/besu/lamteknik/akreditasi
+   ```
 
-## Smoke tests (recommended)
+   Confirm the health response is `healthy` and the loaded `AkreditasiStorage` contract is `0xf03b5af17792D7F7707dc54474083BaCAD17e22F`. Do not register a connector or create data until these checks pass.
 
-```bash
-node utils/test-db-connection.js           # source DB reachable
-node utils/test-blockchain-integration.js  # API + sample POST
-node utils/check-topics.js                 # CDC topics exist
-node utils/test-kafka-events.js            # watch raw events (Ctrl+C to stop)
-```
+2. In Portainer on VM `.41`, deploy the stack file. It builds one local image and starts all three containers attached to the pre-existing `kafka_net`.
 
-## Start consumer
+3. Stop, without removing, `consumer-lamteknik-goeth` and `consumer-lamteknik-fabric`. Leave only `consumer-lamteknik-besu` running. This is a required gate: separate Kafka consumer groups would otherwise deliver the same change to all three targets.
 
-```bash
-node server.js
-# or
-npm start
-```
+4. Register the LamTeknik-only connector using the `.env.local` values below. Its connector name must remain distinct from `erpnext-cdc-connector`; it captures only `lamtek_db.akreditasi`, uses Debezium's no-data snapshot mode (no initial table-row snapshot), and does not modify the ERPNext connector.
 
-The consumer will:
+   ```env
+   CDC_DB_TYPE=mysql
+   DB_HOST=127.0.0.1
+   DB_PORT=3307
+   DB_USER=cdc_user
+   DB_PASSWORD=cdc_pass
+   DB_NAME=lamtek_db
+   TARGET_TABLES=akreditasi
+   TOPIC_PREFIX=lamteknik
+   CDC_CONNECTOR_NAME=lamteknik-cdc-connector
+   KAFKA_CONNECT_URL=http://localhost:8083
+   ```
 
-1. Health-check the LamTeknik API (`GET /health`)
-2. Connect to Kafka and discover topics matching `TOPIC_PREFIX` + `TARGET_TABLES`
-3. Poll every 10s if topics are not ready yet (prompts to run connector script)
-4. Process CDC events in batches → IPFS (files) → `POST /lamteknik/{entity}`
+   ```bash
+   cd connection/consumer-lamteknik
+   node utils/add-lamteknik-connector.js
+   node utils/check-topics.js
+   ```
 
-## Expected output
+5. Confirm topic `lamteknik.lamtek_db.akreditasi` exists and the Besu container logs show its configured target, group, topic subscription, and ready state. Then submit exactly one ordinary valid minimal registration request to `POST /api/v1/akreditasi`. `BLOCKCHAIN_ENABLED=false` ensures this is MySQL CDC only, not a direct backend blockchain write.
 
-```
-============================================================
-LamTeknik CDC Consumer
-============================================================
-Kafka: 127.0.0.1:29092
-API: http://127.0.0.1:4100
-...
-[OK] API connected: healthy (26 contracts)
-[OK] Kafka connected
-[OK] Found 2 topic(s): lamteknik.lamteknik.akreditasi, lamteknik.lamteknik.user
+6. Stop for verification before benchmarks. Confirm exactly one Kafka change, one Besu consumer success log, one successful gateway transaction response, and a retrievable record:
 
-[OK] Consumer ready. Waiting for CDC events...
-```
+   ```bash
+   curl -fsS http://10.9.23.40:4100/blockchains/besu/lamteknik/akreditasi/<recordId>
+   ```
 
-On each processed row:
+## Reliability behavior
 
-```
-Event #1: akreditasi 42 CREATE
-[OK] /lamteknik/akreditasi 42 -> Block 1234 (0xabc123...)
-```
-
-## Stop gracefully
-
-Press `Ctrl+C` — the consumer flushes the pending batch and prints a final report.
-
-## Troubleshooting
-
-| Symptom | Fix |
-|---|---|
-| No CDC topics | Run `node utils/add-lamteknik-connector.js`, check Kafka UI |
-| API not reachable | Start API: `cd API && npm run dev` |
-| `contractsLoaded: 0` | Deploy: `cd API && npm run deploy:lamteknik` |
-| IPFS upload failed | Start IPFS cluster; check `IPFS_CLUSTER_REST_URL` |
-| Unknown entity / 500 on POST | Check table → slug mapping; verify entity exists in API |
-| Duplicate events skipped | Normal — dedup is enabled (`DEDUP_WINDOW_MS`) |
-
-## Reference
-
-Implementation follows [`repo/blockchain-erp-integration/consumer-erp/`](../../repo/blockchain-erp-integration/consumer-erp/).
+Each Kafka message is processed synchronously. The consumer explicitly commits its next Kafka offset only after the selected gateway reports `success`. If the gateway or target network fails, the handler throws and the offset remains uncommitted for retry. The deterministic ID and existing-record check remain in place; Akreditasi upserts by `recordId`, so retrying after an uncertain transaction does not create a second stored ID (though it can issue an update transaction).

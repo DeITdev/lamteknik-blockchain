@@ -37,7 +37,9 @@ const SHARED_TRANSFORMS = {
   "transforms.unwrap.type": "io.debezium.transforms.ExtractNewRecordState",
   "transforms.unwrap.drop.tombstones": "false",
   "transforms.unwrap.delete.handling.mode": "rewrite",
-  "snapshot.mode": "never",
+  // Debezium's supported no-data mode captures schema only and streams new
+  // binlog changes; it prevents an initial table-row snapshot.
+  "snapshot.mode": "no_data",
   "snapshot.locking.mode": "none",
   "decimal.handling.mode": "string",
   "time.precision.mode": "adaptive_time_microseconds",

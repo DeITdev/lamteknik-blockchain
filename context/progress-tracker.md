@@ -4,12 +4,12 @@ Update this file after every meaningful implementation change.
 
 ## Current Phase
 
-**Single-event CDC preparation** — the VM `.41` `lamteknik-webapp` Compose project is deployed and validated. Besu on VM `.40` is intentionally off and must be started manually by the operator before the Besu CDC test.
+**CDC path verified; single-change acceptance issue identified** — the VM `.41` LamTeknik connector and Besu-only consumer are running and the first Akreditasi record reached Besu. One backend POST generated two MySQL changes and therefore two CDC/Besu transactions, so the exact one-change acceptance criterion remains open.
 
 ## Current Goal
 
-- Wait for the operator to start Besu on VM `.40`, then verify connectivity through the gateway.
-- Validate one end-to-end CDC event only after both checks pass.
+- Preserve the working isolated LamTeknik connector and Besu-only consumer state.
+- Correct the backend's CDC-source mode so one Akreditasi POST persists one SQL change, then repeat the single-event acceptance test only with explicit approval.
 
 ---
 
@@ -41,6 +41,9 @@ Update this file after every meaningful implementation change.
 
 ### Frontend, target, connection
 
+- **Multi-network LamTeknik consumer stack (2026-09-23)** — added `connection/consumer-lamteknik/Dockerfile` and `portainer-stack.yml` for three separately grouped consumers on the existing external `kafka_net`: Besu, Go Ethereum, and Hyperledger Fabric. The consumer now validates `BLOCKCHAIN_TARGET`, derives every health/read/write URL from `GATEWAY_ROOT/blockchains/{target}`, rejects unknown targets, and sends no private key. It processes one Kafka message at a time with `autoCommit=false` and explicitly commits only after gateway transaction confirmation; target/gateway failures throw so the record remains retryable. The VM `.41` env examples and CDC/consumer runbooks now use `lamtek_db.akreditasi`, document the LamTeknik-only snapshot-disabled connector, and require stopping the two non-test consumers. This changes no running Kafka/Debezium stack, connector, consumer, or application data.
+- **Besu consumer deployment (2026-09-23)** — deployed `connection/consumer-lamteknik/portainer-stack.yml` on VM `.41`, creating all three consumer containers on external `kafka_net`. Stopped (not removed) `consumer-lamteknik-goeth` and `consumer-lamteknik-fabric`; `consumer-lamteknik-besu` alone remains running. It confirmed the healthy `.40` Besu gateway and Kafka connectivity, then entered its intentional wait for `lamteknik.lamtek_db.akreditasi`. No Debezium connector was registered and no CDC or blockchain write was generated.
+- **First Besu CDC test (2026-09-23)** — registered only `lamteknik-cdc-connector` alongside the untouched `erpnext-cdc-connector`, targeting `lamtek_db.akreditasi` at VM `.41` host port `3307`. Debezium 3.6.2 rejects `snapshot.mode=never`; updated the generator to its supported no-row-snapshot equivalent, `snapshot.mode=no_data`. Created the empty LamTeknik topic, confirmed the Besu consumer group's partition assignment, and submitted exactly one normal `POST /api/v1/akreditasi` request, creating SQL record ID `1`. The backend's direct contract path was unavailable and returned `SKIPPED`, but it then made a second SQL update that set `blockchain_tx_hash=SKIPPED` and `is_on_blockchain=true`. Debezium emitted offsets `0` and `1`; the Besu consumer made and committed two confirmed gateway writes (blocks `41732` and `41736`). The explicit Besu read route returns record `1`. Pipeline connectivity and commit-after-confirmation work; the required one-Kafka-change/one-transaction acceptance result did not pass. No further record or benchmark was created.
 - **VM `.41` application smoke setup (2026-09-23)** — NestJS runs on `:3000` with direct blockchain integration disabled; Next.js runs on `0.0.0.0:3002` and proxies `/api/v1` to NestJS. Four demo users were seeded and admin login was verified without creating an Akreditasi row.
 - **`lamteknik-webapp` Portainer stack (2026-09-23)** — consolidated MySQL, Redis, NestJS, and Next.js definitions with health-gated startup, non-overlapping ports, and the preserved external `target_lamteknik-mysql-data` volume. Local backend/frontend images were built and passed an isolated container smoke test.
 - **VM `.41` cutover preparation (2026-09-23)** — stopped the host-run NestJS and Next.js processes and removed only the legacy MySQL/Redis containers. The existing MySQL named volume remains intact, required host ports are free, and no CDC connector or consumer was started.
@@ -51,15 +54,14 @@ Update this file after every meaningful implementation change.
 
 ## In Progress
 
-- Besu on `.40` is intentionally off. Wait for the operator to start it, then verify RPC and the gateway while retaining the loaded Akreditasi artifact.
+- `consumer-lamteknik-besu` is running and its `lamteknik-cdc-besu` group has committed offset `2` for the LamTeknik topic. Go Ethereum and Fabric consumer containers remain deliberately stopped, not removed. `lamteknik-cdc-connector` is running separately from the unchanged ERPNext connector. Do not create additional Akreditasi rows until the backend's second CDC-producing update is addressed.
 
 ---
 
 ## Next Up
 
-1. **Browser check** — operator confirms landing page, login, and dashboard at `http://10.9.23.41:3002`.
-2. **Besu start and verification** — after the operator starts Besu on `.40`, verify the chain without deleting its volumes or deployment artifacts.
-3. **CDC smoke test** — start the required CDC path and create exactly one event after operator approval.
+1. **Backend CDC-source correction** — prevent the `blockchain_tx_hash=SKIPPED`/`is_on_blockchain=true` persistence update when direct blockchain integration is disabled.
+2. **Repeat single-event acceptance test** — only after explicit approval, use a new record and require one topic offset, one Besu confirmation, and one retrievable payload.
 
 ---
 

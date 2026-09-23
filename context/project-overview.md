@@ -95,7 +95,7 @@ The on-chain CDC envelope (all entities):
 - IPFS private cluster with replication
 - 26 LamTeknik `*Storage` smart contracts + auto-generated REST routes
 - Kafka + Debezium Connect stack (Docker)
-- `consumer-lamteknik` — Kafka consumer with batch processing, dedup, idempotency, IPFS routing
+- `consumer-lamteknik` — target-routed Kafka consumer with explicit post-transaction offset commits, dedup, idempotency, and IPFS routing; its Portainer stack deploys one stopped/started-on-demand consumer per supported blockchain target
 - Env-driven multi-DB connector registration (MySQL, PostgreSQL, MongoDB, SQL Server)
 - File Manager frontend demo (direct upload path, separate from CDC)
 - LamTeknik web UI (`frontend/lamteknik-web/`) + NestJS backend (`target/backend/`) with demo SQL seeds

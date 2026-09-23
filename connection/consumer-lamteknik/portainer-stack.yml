@@ -1,0 +1,65 @@
+services:
+  consumer-lamteknik-besu:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: lamteknik-cdc-consumer:local
+    container_name: consumer-lamteknik-besu
+    restart: unless-stopped
+    environment:
+      KAFKA_BROKER: kafka:9092
+      KAFKA_GROUP_ID: lamteknik-cdc-besu
+      TOPIC_PREFIX: lamteknik
+      TARGET_TABLES: akreditasi
+      BLOCKCHAIN_TARGET: besu
+      GATEWAY_ROOT: http://10.9.23.40:4100
+      CDC_PRIMARY_KEY: id
+      CDC_WRITE_DELETES: "false"
+      SKIP_BLOCKCHAIN_CHECK: "false"
+    networks:
+      - kafka_net
+
+  consumer-lamteknik-goeth:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: lamteknik-cdc-consumer:local
+    container_name: consumer-lamteknik-goeth
+    restart: unless-stopped
+    environment:
+      KAFKA_BROKER: kafka:9092
+      KAFKA_GROUP_ID: lamteknik-cdc-go-ethereum
+      TOPIC_PREFIX: lamteknik
+      TARGET_TABLES: akreditasi
+      BLOCKCHAIN_TARGET: go-ethereum
+      GATEWAY_ROOT: http://10.9.23.40:4100
+      CDC_PRIMARY_KEY: id
+      CDC_WRITE_DELETES: "false"
+      SKIP_BLOCKCHAIN_CHECK: "false"
+    networks:
+      - kafka_net
+
+  consumer-lamteknik-fabric:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: lamteknik-cdc-consumer:local
+    container_name: consumer-lamteknik-fabric
+    restart: unless-stopped
+    environment:
+      KAFKA_BROKER: kafka:9092
+      KAFKA_GROUP_ID: lamteknik-cdc-hyperledger-fabric
+      TOPIC_PREFIX: lamteknik
+      TARGET_TABLES: akreditasi
+      BLOCKCHAIN_TARGET: hyperledger-fabric
+      GATEWAY_ROOT: http://10.9.23.40:4100
+      CDC_PRIMARY_KEY: id
+      CDC_WRITE_DELETES: "false"
+      SKIP_BLOCKCHAIN_CHECK: "false"
+    networks:
+      - kafka_net
+
+networks:
+  kafka_net:
+    external: true
+    name: kafka_net

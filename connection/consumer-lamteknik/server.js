@@ -13,9 +13,21 @@ const path = require("path");
 require("dotenv").config({ path: path.join(__dirname, ".env.local") });
 
 const KAFKA_BROKER = process.env.KAFKA_BROKER || "127.0.0.1:29092";
-const API_ENDPOINT = process.env.API_ENDPOINT || "http://127.0.0.1:4100";
+const GATEWAY_ROOT = (process.env.GATEWAY_ROOT || "http://127.0.0.1:4100").replace(/\/$/, "");
+const BLOCKCHAIN_TARGET = process.env.BLOCKCHAIN_TARGET || "besu";
+const VALID_BLOCKCHAIN_TARGETS = new Set([
+  "besu",
+  "go-ethereum",
+  "hyperledger-fabric",
+]);
+if (!VALID_BLOCKCHAIN_TARGETS.has(BLOCKCHAIN_TARGET)) {
+  throw new Error(
+    `Unknown BLOCKCHAIN_TARGET \"${BLOCKCHAIN_TARGET}\". Expected one of: ${[...VALID_BLOCKCHAIN_TARGETS].join(", ")}`,
+  );
+}
+// All consumer reads and writes must stay inside one explicit gateway namespace.
+const API_ENDPOINT = `${GATEWAY_ROOT}/blockchains/${BLOCKCHAIN_TARGET}`;
 const API_KEY = process.env.API_KEY || "";
-const PRIVATE_KEY = process.env.PRIVATE_KEY;
 const TOPIC_PREFIX = process.env.TOPIC_PREFIX || "lamteknik";
 const TARGET_TABLES = (process.env.TARGET_TABLES || "akreditasi,user")
   .split(",")
@@ -30,10 +42,6 @@ const FILE_COLUMN_PATTERNS = (process.env.CDC_FILE_COLUMNS || "dokumen,attachmen
   .filter(Boolean);
 const CDC_WRITE_DELETES = process.env.CDC_WRITE_DELETES === "true";
 
-const BATCH_SIZE = parseInt(process.env.BATCH_SIZE, 10) || 50;
-const BATCH_TIMEOUT = parseInt(process.env.BATCH_TIMEOUT, 10) || 50;
-const MAX_CONCURRENT_REQUESTS =
-  parseInt(process.env.MAX_CONCURRENT_REQUESTS, 10) || 10;
 const SKIP_BLOCKCHAIN_CHECK = process.env.SKIP_BLOCKCHAIN_CHECK === "true";
 const DEDUP_WINDOW_MS = parseInt(process.env.DEDUP_WINDOW_MS, 10) || 10000;
 
@@ -70,42 +78,12 @@ const consumer = kafka.consumer({
   maxWaitTimeInMs: 1000,
 });
 
-class ConcurrencyLimiter {
-  constructor(maxConcurrent) {
-    this.maxConcurrent = maxConcurrent;
-    this.running = 0;
-    this.queue = [];
-  }
-
-  async execute(fn) {
-    return new Promise((resolve, reject) => {
-      this.queue.push({ fn, resolve, reject });
-      this.tryNext();
-    });
-  }
-
-  tryNext() {
-    if (this.running >= this.maxConcurrent || this.queue.length === 0) return;
-    const { fn, resolve, reject } = this.queue.shift();
-    this.running++;
-    fn()
-      .then(resolve)
-      .catch(reject)
-      .finally(() => {
-        this.running--;
-        this.tryNext();
-      });
-  }
-}
-
-const concurrencyLimiter = new ConcurrencyLimiter(MAX_CONCURRENT_REQUESTS);
-
 function createContentHash(recordId, data) {
   const content = recordId + JSON.stringify(data);
   return crypto.createHash("md5").update(content).digest("hex");
 }
 
-function shouldSkipDuplicate(recordId, data, modifiedTimestamp) {
+function isRecentDuplicate(recordId, data, modifiedTimestamp) {
   const now = Date.now();
   const contentHash = createContentHash(recordId, data);
 
@@ -128,13 +106,17 @@ function shouldSkipDuplicate(recordId, data, modifiedTimestamp) {
     if (timeDiff < 1000) return true;
   }
 
-  recentRecords.set(cacheKey, { timestamp: now, modifiedTimestamp });
-  recentRecords.set(recordKey, {
-    timestamp: now,
+  return false;
+}
+
+function rememberProcessedRecord(recordId, data, modifiedTimestamp) {
+  const contentHash = createContentHash(recordId, data);
+  recentRecords.set(`${recordId}:${contentHash}`, { timestamp: Date.now(), modifiedTimestamp });
+  recentRecords.set(recordId, {
+    timestamp: Date.now(),
     modifiedTimestamp,
     contentHash,
   });
-  return false;
 }
 
 function tableToEntitySlug(tableName) {
@@ -358,69 +340,28 @@ function transformForBlockchain(tableName, data) {
 }
 
 async function sendToBlockchain(entitySlug, payload) {
-  return concurrencyLimiter.execute(async () => {
-    const body = { ...payload };
-    if (PRIVATE_KEY && !API_KEY) body.privateKey = PRIVATE_KEY;
+  const headers = { "Content-Type": "application/json" };
+  if (API_KEY) headers["x-api-key"] = API_KEY;
 
-    const headers = { "Content-Type": "application/json" };
-    if (API_KEY) headers["x-api-key"] = API_KEY;
+  try {
+    const response = await axios.post(
+      `${API_ENDPOINT}/lamteknik/${entitySlug}`,
+      payload,
+      { timeout: 60000, headers },
+    );
 
-    try {
-      const response = await axios.post(
-        `${API_ENDPOINT}/lamteknik/${entitySlug}`,
-        body,
-        { timeout: 60000, headers },
-      );
-
-      if (response.data.success) {
-        const blockNumber = response.data.blockNumber;
-        const txHash = response.data.transactionHash;
-        console.log(
-          `[OK] /lamteknik/${entitySlug} ${payload.recordId} -> Block ${blockNumber} (${txHash?.slice(0, 10)}...)`,
-        );
-        return true;
-      }
-
-      console.log(
-        `[X] API failed for /lamteknik/${entitySlug}: ${JSON.stringify(response.data)}`,
-      );
-      return false;
-    } catch (error) {
-      const errorMsg = error.response?.data?.error || error.message;
-      console.log(
-        `[X] /lamteknik/${entitySlug} blockchain call failed: ${errorMsg}`,
-      );
-      return false;
+    if (!response.data.success) {
+      throw new Error(JSON.stringify(response.data));
     }
-  });
-}
 
-const messageQueue = [];
-let batchTimeout = null;
-
-async function processBatch() {
-  if (messageQueue.length === 0) return;
-
-  const batch = messageQueue.splice(0, BATCH_SIZE);
-  console.log(`\n--- Processing batch of ${batch.length} messages ---`);
-
-  const promises = batch.map(({ topic, message }) =>
-    processMessage(topic, message),
-  );
-  await Promise.allSettled(promises);
-
-  console.log(`--- Batch completed ---\n`);
-}
-
-async function queueMessage(topic, message) {
-  messageQueue.push({ topic, message });
-
-  if (batchTimeout) clearTimeout(batchTimeout);
-
-  if (messageQueue.length >= BATCH_SIZE) {
-    await processBatch();
-  } else {
-    batchTimeout = setTimeout(processBatch, BATCH_TIMEOUT);
+    const blockNumber = response.data.blockNumber;
+    const txHash = response.data.transactionHash;
+    console.log(
+      `[OK] /blockchains/${BLOCKCHAIN_TARGET}/lamteknik/${entitySlug} ${payload.recordId} -> Block ${blockNumber} (${txHash?.slice(0, 10)}...)`,
+    );
+  } catch (error) {
+    const errorMsg = error.response?.data?.error || error.message;
+    throw new Error(`Gateway transaction was not confirmed: ${errorMsg}`);
   }
 }
 
@@ -494,7 +435,7 @@ async function processMessage(topic, message) {
       changeData.modification ??
       new Date().toISOString();
 
-    if (shouldSkipDuplicate(recordId, changeData, modifiedTimestamp)) {
+    if (isRecentDuplicate(recordId, changeData, modifiedTimestamp)) {
       eventCounter++;
       console.log(
         `Event #${eventCounter}: ${tableName} ${recordId} ${operation} - DUPLICATE`,
@@ -550,16 +491,16 @@ async function processMessage(topic, message) {
       changeData,
     );
     const payload = transformForBlockchain(tableName, processedData);
-    const success = await sendToBlockchain(entitySlug, payload);
-
-    if (success) {
-      processed++;
-    } else {
-      errors++;
-    }
+    await sendToBlockchain(entitySlug, payload);
+    // Only cache a duplicate after the gateway confirms the transaction. A
+    // transient failure must remain eligible for Kafka redelivery.
+    rememberProcessedRecord(recordId, changeData, modifiedTimestamp);
+    processed++;
   } catch (error) {
     console.log(`[X] Processing failed for topic ${topic}: ${error.message}`);
     errors++;
+    // Throwing makes KafkaJS leave this offset uncommitted for redelivery.
+    throw error;
   }
 }
 
@@ -589,22 +530,25 @@ async function start() {
   console.log("LamTeknik CDC Consumer");
   console.log("=".repeat(60));
   console.log(`Kafka: ${KAFKA_BROKER}`);
-  console.log(`API: ${API_ENDPOINT}`);
+  console.log(`Gateway root: ${GATEWAY_ROOT}`);
+  console.log(`Blockchain target: ${BLOCKCHAIN_TARGET}`);
+  console.log(`Gateway route: ${API_ENDPOINT}`);
   console.log(`IPFS: ${IPFS_CLUSTER_REST_URL}`);
   console.log(`Topic Prefix: ${TOPIC_PREFIX}`);
   console.log(`Tables: ${TARGET_TABLES.join(", ")}`);
-  console.log(`Batch Size: ${BATCH_SIZE}, Max Concurrent: ${MAX_CONCURRENT_REQUESTS}`);
   console.log("");
 
-  console.log("Testing API connection...");
+  console.log("Testing target gateway health...");
   try {
     const response = await axios.get(`${API_ENDPOINT}/health`, { timeout: 5000 });
+    if (response.data.status !== "healthy") {
+      throw new Error(`target reported ${response.data.status || "an unhealthy status"}`);
+    }
     console.log(
-      `[OK] API connected: ${response.data.status || "healthy"} (${response.data.contractsLoaded ?? 0} contracts)`,
+      `[OK] ${BLOCKCHAIN_TARGET} gateway connected: ${response.data.status} (${response.data.contractsLoaded ?? 0} contracts)`,
     );
   } catch (error) {
-    console.log(`[WARNING] API not reachable: ${error.message}`);
-    console.log("  Consumer will still run, but blockchain sync will fail.");
+    throw new Error(`Target gateway health check failed at ${API_ENDPOINT}/health: ${error.message}`);
   }
 
   try {
@@ -639,8 +583,15 @@ async function start() {
   await consumer.subscribe({ topics: availableTopics, fromBeginning: false });
 
   await consumer.run({
-    eachMessage: async ({ topic, message }) => {
-      await queueMessage(topic, message);
+    autoCommit: false,
+    eachMessage: async ({ topic, partition, message }) => {
+      await processMessage(topic, message);
+      // Kafka stores the next offset to read. This is deliberately after the
+      // confirmed target transaction (or an intentionally skipped record).
+      await consumer.commitOffsets([
+        { topic, partition, offset: (BigInt(message.offset) + 1n).toString() },
+      ]);
+      console.log(`[OK] Committed Kafka offset ${message.offset} for ${topic}[${partition}]`);
     },
   });
 
@@ -659,11 +610,6 @@ async function start() {
 
 async function shutdown() {
   console.log("\nShutting down...");
-
-  if (messageQueue.length > 0) {
-    console.log(`Processing ${messageQueue.length} remaining messages...`);
-    await processBatch();
-  }
 
   if (connected) {
     try {
