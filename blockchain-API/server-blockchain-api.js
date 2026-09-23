@@ -19,6 +19,7 @@ const IPFS_CLUSTER_REST_URL = process.env.IPFS_CLUSTER_REST_URL || "http://127.0
 const IPFS_GATEWAY_URL = process.env.IPFS_GATEWAY_URL || "http://127.0.0.1:8080";
 const AUDIT_LOG_ENABLED = String(process.env.AUDIT_LOG_ENABLED || "false").toLowerCase() === "true";
 const BUILD_ROOT = path.join(__dirname, "build", "chains");
+const ERP_ARTIFACTS_DIR = path.join(BUILD_ROOT, "besu", "contracts", "erpnext");
 const FABRIC_ENTITY_SLUGS = Object.freeze(["akreditasi", "asesmen-kecukupan", "asesmen-lapangan", "asesor", "bank", "institusi", "jenjang", "keputusan-ma", "klaster-ilmu", "klaster-prodi", "klaster-profesi", "komite-evaluasi", "laporan-asesmen", "majelis-akreditasi", "pembayaran", "penawaran-asesor", "pengesahan-ak", "pengesahan-al", "prodi", "provinsi", "respon-asesor", "sekretariat", "tenant", "upps", "user", "validator"]);
 
 function normalizePrivateKey(value) { if (!value) throw new Error("Missing privateKey"); return value.startsWith("0x") ? value : `0x${value}`; }
@@ -65,25 +66,28 @@ function loadApiKeys() {
 }
 function apiKeyMiddleware(req, res, next) { if (!API_KEY_REQUIRED) { req.keyProfile = { role: "admin", label: "dev-bypass", allowedEntities: ["*"] }; return next(); } const profile = loadApiKeys().keys.find((key) => key.key === req.headers["x-api-key"]); if (!profile) return res.status(401).json({ success: false, error: "Invalid or missing x-api-key" }); req.keyProfile = profile; next(); }
 function requireAdmin(req, res, next) { if (!API_KEY_REQUIRED || req.keyProfile?.role === "admin") return next(); res.status(403).json({ success: false, error: "Admin API key required" }); }
-function entityScopeMiddleware(req, res, next) { if (!API_KEY_REQUIRED) return next(); const match = req.originalUrl.match(/(?:^\/blockchains\/[^/]+)?\/lamteknik\/([^/?]+)/); if (!match || req.keyProfile.allowedEntities.includes("*") || req.keyProfile.allowedEntities.includes(match[1])) return next(); res.status(403).json({ success: false, error: `API key not allowed for entity: ${match[1]}` }); }
+function entityScopeMiddleware(req, res, next) { if (!API_KEY_REQUIRED) return next(); const match = req.originalUrl.match(/(?:^\/blockchains\/[^/]+)?\/(?:lamteknik|erpnext)\/([^/?]+)/); if (!match || req.keyProfile.allowedEntities.includes("*") || req.keyProfile.allowedEntities.includes(match[1])) return next(); res.status(403).json({ success: false, error: `API key not allowed for entity: ${match[1]}` }); }
 
-function loadEntities(target) {
-  if (!fs.existsSync(target.artifactsDir)) { console.warn(`[lamteknik] ${target.id} artifacts missing: ${target.artifactsDir}`); return []; }
+function loadEntities(target, artifactsDir = target.artifactsDir, registryPrefix = "LamTeknik", routeSlugs = {}) {
+  if (!fs.existsSync(artifactsDir)) { console.warn(`[gateway] ${target.id} artifacts missing: ${artifactsDir}`); return []; }
   const entities = [];
-  for (const file of fs.readdirSync(target.artifactsDir).sort()) {
+  for (const file of fs.readdirSync(artifactsDir).sort()) {
     if (!file.endsWith(".json") || file === "ContractRegistry.json") continue;
     try {
-      const artifact = JSON.parse(fs.readFileSync(path.join(target.artifactsDir, file), "utf8"));
+      const artifact = JSON.parse(fs.readFileSync(path.join(artifactsDir, file), "utf8"));
       const contractName = artifact.contractName || file.replace(/\.json$/, "");
       const address = artifact.networks?.[String(target.chainId)]?.address;
       if (!address) continue;
       const entityName = toEntityName(contractName);
-      entities.push({ artifact, contractName, entityName, entitySlug: toEntitySlug(contractName), address, registryKey: artifact.registryKey || `LamTeknik:${contractName}`, contract: new ethers.Contract(address, artifact.abi, target.provider) });
-    } catch (error) { console.warn(`[lamteknik] Failed to load ${target.id}/${file}: ${error.message}`); }
+      const generatedSlug = toEntitySlug(contractName);
+      entities.push({ artifact, contractName, entityName, entitySlug: routeSlugs[generatedSlug] || generatedSlug, address, registryKey: artifact.registryKey || `${registryPrefix}:${contractName}`, contract: new ethers.Contract(address, artifact.abi, target.provider) });
+    } catch (error) { console.warn(`[gateway] Failed to load ${target.id}/${file}: ${error.message}`); }
   }
   return entities;
 }
 const entitiesByTarget = new Map(Object.values(TARGETS).map((target) => [target.id, loadEntities(target)]));
+const ERP_ROUTE_SLUGS = Object.freeze({ employee: "employees", attendance: "attendances" });
+let erpEntities = loadEntities(TARGETS.besu, ERP_ARTIFACTS_DIR, "ERPNext", ERP_ROUTE_SLUGS);
 function targetDetails(target) { return { target: target.id, label: target.label, chainId: target.chainId, rpcUrl: target.rpcUrl, signerMode: target.signerMode, contractsLoaded: entitiesByTarget.get(target.id).length }; }
 
 function entityRouter(target, entity) {
@@ -117,8 +121,8 @@ function entityRouter(target, entity) {
   });
   return router;
 }
-function mountEntityRoutes(app, target, entity, routePrefix) {
-  app.use(`${routePrefix}/lamteknik/${entity.entitySlug}`, entityRouter(target, entity));
+function mountEntityRoutes(app, target, entity, routePrefix, moduleName = "lamteknik") {
+  app.use(`${routePrefix}/${moduleName}/${entity.entitySlug}`, entityRouter(target, entity));
 }
 
 function healthHandler(target) { return async (_req, res) => { try { res.json({ success: true, status: "healthy", ...targetDetails(target), blockNumber: await target.provider.getBlockNumber() }); } catch (error) { res.status(500).json({ success: false, status: "unhealthy", ...targetDetails(target), error: error.message }); } }; }
@@ -155,6 +159,14 @@ function runDeploy(targetId, entitiesFilter) {
     child.stdout.on("data", (data) => { stdout += data; }); child.stderr.on("data", (data) => { stderr += data; }); child.on("close", (code) => code === 0 ? resolve({ stdout, stderr }) : reject(new Error(stderr || stdout || `Deploy exited with code ${code}`)));
   });
 }
+function runErpDeploy() {
+  return new Promise((resolve, reject) => {
+    const target = TARGETS.besu;
+    const env = { ...process.env, BLOCKCHAIN_TARGET: "besu", BLOCKCHAIN_RPC_URL: target.rpcUrl, CHAIN_ID: String(target.chainId) };
+    const child = spawn("npm", ["run", "deploy:erpnext:besu"], { cwd: __dirname, env, shell: true }); let stdout = "", stderr = "";
+    child.stdout.on("data", (data) => { stdout += data; }); child.stderr.on("data", (data) => { stderr += data; }); child.on("close", (code) => code === 0 ? resolve({ stdout, stderr }) : reject(new Error(stderr || stdout || `ERPNext deploy exited with code ${code}`)));
+  });
+}
 
 const app = express();
 app.use(cors({ origin: CORS_ORIGIN }));
@@ -173,6 +185,9 @@ for (const target of Object.values(TARGETS)) {
   app.get(`${prefix}/lamteknik`, entitiesHandler(target, prefix)); app.get(`${prefix}/contracts`, contractsHandler(target));
   app.post(`${prefix}/deploy/lamteknik`, requireAdmin, async (req, res) => { try { const result = await runDeploy(target.id, Array.isArray(req.body?.entities) ? req.body.entities : undefined); entitiesByTarget.set(target.id, loadEntities(target)); res.json({ success: true, target: target.id, message: "Deploy completed", ...result }); } catch (error) { res.status(500).json({ success: false, target: target.id, error: error.message }); } });
 }
+for (const entity of erpEntities) mountEntityRoutes(app, TARGETS.besu, entity, "/blockchains/besu", "erpnext");
+app.get("/blockchains/besu/erpnext", (_req, res) => res.json({ success: true, target: "besu", application: "erpnext", entities: erpEntities.map((entity) => ({ entity: entity.entitySlug, contractName: entity.contractName, registryKey: entity.registryKey, address: entity.address, basePath: `/blockchains/besu/erpnext/${entity.entitySlug}` })) }));
+app.post("/blockchains/besu/deploy/erpnext", requireAdmin, async (_req, res) => { try { const result = await runErpDeploy(); erpEntities = loadEntities(TARGETS.besu, ERP_ARTIFACTS_DIR, "ERPNext", ERP_ROUTE_SLUGS); res.json({ success: true, target: "besu", application: "erpnext", message: "Deploy completed", ...result }); } catch (error) { res.status(500).json({ success: false, target: "besu", application: "erpnext", error: error.message }); } });
 mountFabricEntityRoutes(app);
 app.get("/blockchains/hyperledger-fabric/lamteknik", fabricEntitiesHandler);
 app.get("/blockchains/hyperledger-fabric/contracts", (_req, res) => res.json({ success: true, target: "hyperledger-fabric", chaincode: fabric.chaincodeName, channel: fabric.channelName }));
@@ -181,6 +196,7 @@ app.get("/lamteknik", entitiesHandler(TARGETS.besu, "")); app.get("/contracts", 
 app.post("/deploy/lamteknik", requireAdmin, async (req, res) => { try { const result = await runDeploy("besu", Array.isArray(req.body?.entities) ? req.body.entities : undefined); entitiesByTarget.set("besu", loadEntities(TARGETS.besu)); res.json({ success: true, target: "besu", message: "Deploy completed", ...result }); } catch (error) { res.status(500).json({ success: false, target: "besu", error: error.message }); } });
 app.use("/blockchains/:target/lamteknik/:slug", (req, res, next) => { const target = TARGETS[req.params.target]; if (!target) return res.status(404).json({ success: false, error: `Unknown blockchain target: ${req.params.target}`, availableTargets: Object.keys(TARGETS) }); const entity = entitiesByTarget.get(target.id).find((candidate) => candidate.entitySlug === req.params.slug); if (entity) return entityRouter(target, entity).handle(req, res, next); res.status(404).json({ success: false, target: target.id, error: `Unknown LamTeknik entity: ${req.params.slug}`, availableEntities: entitiesByTarget.get(target.id).map((candidate) => candidate.entitySlug).sort() }); });
 app.use("/lamteknik/:slug", (req, res, next) => { const entity = entitiesByTarget.get("besu").find((candidate) => candidate.entitySlug === req.params.slug); if (entity) return entityRouter(TARGETS.besu, entity).handle(req, res, next); res.status(404).json({ success: false, target: "besu", error: `Unknown LamTeknik entity: ${req.params.slug}`, availableEntities: entitiesByTarget.get("besu").map((candidate) => candidate.entitySlug).sort() }); });
+app.use("/blockchains/besu/erpnext/:slug", (req, res, next) => { const entity = erpEntities.find((candidate) => candidate.entitySlug === req.params.slug); if (entity) return entityRouter(TARGETS.besu, entity).handle(req, res, next); res.status(404).json({ success: false, target: "besu", application: "erpnext", error: `Unknown ERPNext entity: ${req.params.slug}`, availableEntities: erpEntities.map((candidate) => candidate.entitySlug).sort() }); });
 process.on("SIGHUP", () => { loadApiKeys(); console.log("[lamteknik] Reloaded API keys"); });
 process.on("SIGTERM", () => fabric.close());
 process.on("SIGINT", () => fabric.close());

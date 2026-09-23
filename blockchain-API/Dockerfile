@@ -12,4 +12,4 @@ COPY . .
 
 EXPOSE 4100
 
-CMD ["node", "server-lamteknik.js"]
+CMD ["node", "server-blockchain-api.js"]

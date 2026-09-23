@@ -1,0 +1,23 @@
+services:
+  consumer-erp-besu:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: erpnext-cdc-consumer:local
+    container_name: consumer-erp-besu
+    restart: unless-stopped
+    environment:
+      KAFKA_BROKER: kafka:9092
+      KAFKA_GROUP_ID: erpnext-cdc-besu
+      TOPIC_PREFIX: erpnext
+      TARGET_TABLES: tabEmployee,tabAttendance
+      GATEWAY_ROOT: http://10.9.23.40:4100
+      CDC_WRITE_DELETES: "true"
+      SKIP_BLOCKCHAIN_CHECK: "false"
+    networks:
+      - kafka_net
+
+networks:
+  kafka_net:
+    external: true
+    name: kafka_net

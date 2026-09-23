@@ -1,6 +1,6 @@
 # LamTeknik API - Postman setup
 
-Importable Postman collection + environment for [API/server-lamteknik.js](../server-lamteknik.js).
+Importable Postman collection + environment for [API/server-blockchain-api.js](../server-blockchain-api.js).
 
 Files in this folder:
 

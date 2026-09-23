@@ -96,6 +96,7 @@ The on-chain CDC envelope (all entities):
 - 26 LamTeknik `*Storage` smart contracts + auto-generated REST routes
 - Kafka + Debezium Connect stack (Docker)
 - `consumer-lamteknik` — target-routed Kafka consumer with explicit post-transaction offset commits, dedup, idempotency, and IPFS routing; its Portainer stack deploys one stopped/started-on-demand consumer per supported blockchain target
+- `consumer-erp` — ERPNext Employee and Attendance CDC consumer; it writes only through the Besu gateway namespace and never handles a blockchain private key
 - Env-driven multi-DB connector registration (MySQL, PostgreSQL, MongoDB, SQL Server)
 - File Manager frontend demo (direct upload path, separate from CDC)
 - LamTeknik web UI (`frontend/lamteknik-web/`) + NestJS backend (`target/backend/`) with demo SQL seeds

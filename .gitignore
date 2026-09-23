@@ -66,6 +66,8 @@ connection/consumer-lamteknik/.env.local
 connection/consumer-lamteknik/node_modules/
 connection/consumer-lamteknik/utils/config/lamteknik-connector.json
 connection/consumer-lamteknik/config/table-mapping.json
+connection/consumer-erp/.env.local
+connection/consumer-erp/node_modules/
 
 # target application
 target/.env

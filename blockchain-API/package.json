@@ -2,16 +2,17 @@
   "name": "lamteknik-blockchain-api",
   "version": "1.0.0",
   "description": "LamTeknik multi-blockchain API gateway for Besu and Go Ethereum",
-  "main": "server-lamteknik.js",
+  "main": "server-blockchain-api.js",
   "type": "module",
   "scripts": {
-    "start": "node server-lamteknik.js",
-    "dev": "nodemon server-lamteknik.js",
+    "start": "node server-blockchain-api.js",
+    "dev": "nodemon server-blockchain-api.js",
     "test": "node --test",
     "compile": "hardhat --config ./hardhat.config.js compile",
     "deploy:lamteknik": "npm run deploy:besu",
     "deploy:besu": "BLOCKCHAIN_TARGET=besu hardhat --config ./hardhat.config.js run ./scripts/deploy-lamteknik.js --network besu",
-    "deploy:go-ethereum": "BLOCKCHAIN_TARGET=go-ethereum hardhat --config ./hardhat.config.js run ./scripts/deploy-lamteknik.js --network geth"
+    "deploy:go-ethereum": "BLOCKCHAIN_TARGET=go-ethereum hardhat --config ./hardhat.config.js run ./scripts/deploy-lamteknik.js --network geth",
+    "deploy:erpnext:besu": "BLOCKCHAIN_TARGET=besu hardhat --config ./hardhat.config.js run ./scripts/deploy-erpnext.js --network besu"
   },
   "dependencies": {
     "@grpc/grpc-js": "^1.12.6",

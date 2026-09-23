@@ -17,7 +17,7 @@ For smart contract compile/deploy, see [how-to-smart-contract.md](./how-to-smart
 
 ```
 API/
-├── server-lamteknik.js           # Express server — single entry point
+├── server-blockchain-api.js      # Express server — single entry point
 ├── build/contracts/lamteknik/    # Runtime artifacts loaded at startup (ABI + address)
 ├── postman/
 │   ├── LamTeknik.postman_collection.json
@@ -30,7 +30,7 @@ API/
 ```mermaid
 flowchart LR
   Client[Postman / HTTP client]
-  Server[server-lamteknik.js]
+  Server[server-blockchain-api.js]
   Artifacts[build/contracts/lamteknik/]
   Besu[Besu RPC :8545]
 
@@ -40,7 +40,7 @@ flowchart LR
   Server -->|POST: sign + send tx| Besu
 ```
 
-On startup, `server-lamteknik.js`:
+On startup, `server-blockchain-api.js`:
 
 1. Connects to Besu via `BLOCKCHAIN_RPC_URL` / `BESU_RPC_URL` (default `http://localhost:8545`).
 2. Reads every `*.json` in `build/contracts/lamteknik/` (skips `ContractRegistry.json`).

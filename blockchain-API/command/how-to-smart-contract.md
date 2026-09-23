@@ -22,7 +22,7 @@ API/
 ├── scripts/
 │   └── deploy-lamteknik.js       # Auto-discovers and deploys all *Storage.sol
 ├── hardhat.config.js             # Compile + Besu network config
-├── server-lamteknik.js           # REST API — loads deployed artifacts at runtime
+├── server-blockchain-api.js      # REST API — loads deployed artifacts at runtime
 ├── build/                        # Generated at deploy time (gitignored)
 │   ├── contracts/lamteknik/      # Runtime JSON per contract (ABI + address)
 │   └── lamteknik-deployments.json
@@ -73,7 +73,7 @@ struct Akreditasi {
 | `getAkreditasiIdByIndex(i)` | ID lookup by array index |
 | `retrieve()` | Summary: total count + all IDs |
 
-The API server (`server-lamteknik.js`) derives function names and routes automatically from the contract name — no server changes needed when you add a new `*Storage.sol` that follows this pattern.
+The API server (`server-blockchain-api.js`) derives function names and routes automatically from the contract name — no server changes needed when you add a new `*Storage.sol` that follows this pattern.
 
 ### Adding a new entity
 
