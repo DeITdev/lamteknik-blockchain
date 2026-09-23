@@ -4,11 +4,10 @@ Update this file after every meaningful implementation change.
 
 ## Current Phase
 
-**Single-event Besu smoke-test preparation** — local source backend is healthy; remote contract deployment is waiting for a rebuilt gateway image.
+**Single-event Besu smoke-test preparation** — local source backend is healthy; the `.40` gateway has been rebuilt with Hardhat available and is ready for the operator's scoped contract deployment.
 
 ## Current Goal
 
-- Rebuild/redeploy the `.40` gateway with Hardhat available at runtime.
 - Deploy only `ContractRegistry` and `AkreditasiStorage` to Besu.
 - Validate one end-to-end CDC event after the deployment is checked in Postman.
 
@@ -48,16 +47,14 @@ Update this file after every meaningful implementation change.
 
 ## In Progress
 
-- Rebuild/redeploy the gateway container on `.40` from the corrected `API/Dockerfile`.
 - Retry the Besu deployment for `AkreditasiStorage`; the first request safely failed before broadcasting because the old image lacked `hardhat`.
 
 ---
 
 ## Next Up
 
-1. **Gateway** — rebuild/redeploy the `.40` container.
-2. **Besu contracts** — deploy and verify `ContractRegistry` plus `AkreditasiStorage`.
-3. **Postman check** — let the operator confirm the deployment before starting the CDC consumer or creating an event.
+1. **Besu contracts** — deploy and verify `ContractRegistry` plus `AkreditasiStorage`.
+2. **Postman check** — let the operator confirm the deployment before starting the CDC consumer or creating an event.
 
 ---
 
@@ -76,3 +73,4 @@ Update this file after every meaningful implementation change.
 - 2026-09-09: Gateway now exposes separate Besu (`/blockchains/besu`) and Go Ethereum (`/blockchains/go-ethereum`) targets with isolated artifact directories and signing paths. All 26 LamTeknik contracts were deployed to Geth; a Go-Ethereum namespace POST/GET smoke test passed. Besu remains stopped and unmodified.
 - 2026-09-10: Added Hyperledger Fabric Postman target configuration (`/blockchains/hyperledger-fabric`) alongside isolated Besu and Go Ethereum namespaces, including Fabric chaincode health and CDC record requests.
 - 2026-09-22: Started the local NestJS source backend with MySQL and Redis. Added `BLOCKCHAIN_ENABLED=false` support so CDC-source mode does not connect directly to Besu; the backend passed compilation and `/api/v1/health`. Besu on `.40` was healthy and unchanged with zero loaded contracts. The scoped `AkreditasiStorage` deployment stopped safely when the gateway reported `hardhat: not found`; `API/Dockerfile` now installs the runtime deployment dependency. No CDC consumer was started and no CDC event was generated.
+- 2026-09-23: Rebuilt and recreated only the `.40` `lamteknik-gateway` service. Its runtime Hardhat CLI is `3.9.0`; Besu health remains successful on chain `1337` with `contractsLoaded: 0` and an empty contracts response. No contract deployment, CDC event, Besu restart, volume deletion, or artifact removal occurred.
