@@ -1,6 +1,8 @@
 # LamTeknik Infrastructure
 
-Target deployment layout: **blockchain + IPFS + API gateway on server `.40`**, **app + CDC on server `.42`**. Dev build — open API, no firewall rules on `.40`. Public API access via nginx (configured separately).
+Target deployment layout: **blockchain + IPFS + API gateway on server `.40`**, **app + CDC on server `.41`**. Dev build — open API, no firewall rules on `.40`. Public API access via nginx (configured separately).
+
+**Current runtime state (2026-09-23):** Besu on VM `.40` is intentionally turned off. The operator starts the selected blockchain network manually, one network at a time, before its tests.
 
 **VM runbook:** [vm-40-node-vault-plan.md](./vm-40-node-vault-plan.md)
 
@@ -14,9 +16,9 @@ Target deployment layout: **blockchain + IPFS + API gateway on server `.40`**, *
 |-----------|---------|
 | **Unified infra on `.40`** | Besu, IPFS Cluster, and LamTeknik Gateway run on one VM. Gateway reaches Besu and IPFS via `host.docker.internal`. |
 | **Open dev API** | `API_KEY_REQUIRED=false` — apps call `:4100` without `x-api-key`. Gateway signs writes with `DEPLOYER_PRIVATE_KEY`. |
-| **Always-on containers** | All stacks use `restart: unless-stopped`. |
+| **Operator-controlled blockchain** | The selected blockchain network is started manually for its test window; only one blockchain network runs at a time. Other supporting services may use `restart: unless-stopped`. |
 | **Besu RPC localhost-only** | Raw JSON-RPC never exposed; apps use Express REST on `:4100`. |
-| **CDC with app** | Kafka, Debezium, and `consumer-lamteknik` live on the **same machine as MySQL** — server `.42`. |
+| **CDC with app** | Kafka, Debezium, and `consumer-lamteknik` live on the **same machine as MySQL** — server `.41`. |
 | **nginx external** | Public API exposure handled outside this repo (reverse proxy → `:4100`). |
 | **No FireFly / No Kong** | Custom Express gateway only. |
 
@@ -27,7 +29,7 @@ Target deployment layout: **blockchain + IPFS + API gateway on server `.40`**, *
 | Host | IP | Role |
 |------|-----|------|
 | **Infra stack** | `10.9.23.40` | Besu IBFT + IPFS Cluster + LamTeknik Gateway |
-| **App + CDC** | `10.9.23.42` | MySQL, NestJS, lamteknik-web, Kafka, Debezium, consumer |
+| **App + CDC** | `10.9.23.41` | MySQL, NestJS, lamteknik-web, Kafka, Debezium, consumer |
 
 ```mermaid
 flowchart TB
@@ -39,7 +41,7 @@ flowchart TB
     GW --> IPFS
   end
 
-  subgraph vm42 ["Server .42 — 10.9.23.42"]
+  subgraph vm41 ["Server .41 — 10.9.23.41"]
     MySQL[(MySQL :3307)]
     Kafka[Kafka + Debezium]
     Consumer[consumer-lamteknik]
@@ -59,11 +61,11 @@ flowchart TB
 
 ## Repository components by host
 
-| Repo path | Server `.40` | Server `.42` |
+| Repo path | Server `.40` | Server `.41` |
 |-----------|--------------|--------------|
-| [`backend/blockchain-besu-ibft/`](../backend/blockchain-besu-ibft/) | ✓ | |
-| [`backend/ipfs-cluster-private/`](../backend/ipfs-cluster-private/) | ✓ | |
-| [`API/`](../API/) (LamTeknik Gateway) | ✓ | |
+| [`blockchain/blockchain-besu-ibft/`](../blockchain/blockchain-besu-ibft/) | ✓ | |
+| [`blockchain/ipfs-cluster-private/`](../blockchain/ipfs-cluster-private/) | ✓ | |
+| [`blockchain-API/`](../blockchain-API/) (LamTeknik Gateway) | ✓ | |
 | [`connection/kafka-debezium/`](../connection/kafka-debezium/) | | ✓ |
 | [`connection/consumer-lamteknik/`](../connection/consumer-lamteknik/) | | ✓ |
 | [`target/`](../target/) (MySQL + NestJS) | | ✓ |
@@ -79,14 +81,14 @@ flowchart TB
 | 8546–8548 | Besu RPC nodes 2–4 | all | Ops |
 | 8081 | Chainlens explorer | all | Ops only |
 | 4100 | LamTeknik Gateway | all | nginx proxies here |
-| 9094 | IPFS Cluster REST | default | Gateway + `.42` consumer |
+| 9094 | IPFS Cluster REST | default | Gateway + `.41` consumer |
 | 8080 | IPFS gateway | default | Reads |
-| 9095 | Cluster IPFS proxy | default | NestJS uploads from `.42` |
+| 9095 | Cluster IPFS proxy | default | NestJS uploads from `.41` |
 | 5001 | Kubo API / WebUI | localhost | SSH tunnel |
 
 ---
 
-## Port matrix — VM `.42` (local dev reference)
+## Port matrix — VM `.41` (local dev reference)
 
 | Port | Service |
 |------|---------|
@@ -98,7 +100,7 @@ flowchart TB
 | 8083 | Debezium Connect |
 | 8085 | Kafka UI |
 
-**Outbound (`.42` → `.40`):**
+**Outbound (`.41` → `.40`):**
 
 | Target | URL | Used by |
 |--------|-----|---------|
@@ -121,7 +123,7 @@ Consumer file columns may also call IPFS direct on `.40:9094`.
 
 ### Environment variables
 
-**Gateway on `.40` — [`API/.env`](../API/.env.example):**
+**Gateway on `.40` — [`blockchain-API/.env`](../blockchain-API/.env.example):**
 
 ```env
 LAMTEKNIK_PORT=4100
@@ -133,7 +135,7 @@ API_KEY_REQUIRED=false
 CORS_ORIGIN=*
 ```
 
-**Consumer on `.42`:**
+**Consumer on `.41`:**
 
 ```env
 API_ENDPOINT=http://10.9.23.40:4100
@@ -150,8 +152,8 @@ IPFS_CLUSTER_REST_URL=http://10.9.23.40:9094
 | 1 | `.40` | Besu IBFT |
 | 2 | `.40` | IPFS Cluster |
 | 3 | `.40` | Deploy contracts + Gateway |
-| 4 | `.42` | MySQL + NestJS |
-| 5 | `.42` | Kafka + Debezium + consumer |
+| 4 | `.41` | `lamteknik-webapp` (MySQL + Redis + NestJS + Next.js) |
+| 5 | `.41` | Kafka + Debezium + consumer |
 | 6 | All | Integration tests |
 
 ---
@@ -161,6 +163,6 @@ IPFS_CLUSTER_REST_URL=http://10.9.23.40:9094
 | VM | IP | Runbook |
 |----|-----|---------|
 | Infra stack | `10.9.23.40` | [vm-40-node-vault-plan.md](./vm-40-node-vault-plan.md) |
-| App + CDC | `10.9.23.42` | Phase 2 in [revamp-system-plan.md](./revamp-system-plan.md) |
+| App + CDC | `10.9.23.41` | Phase 2 in [revamp-system-plan.md](./revamp-system-plan.md) |
 
 **Deprecated:** [vm-41-gateway-plan.md](./vm-41-gateway-plan.md) — IPFS moved to `.40`.

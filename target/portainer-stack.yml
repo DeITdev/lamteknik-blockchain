@@ -1,5 +1,3 @@
-name: lamteknik-webapp
-
 services:
   mysql:
     image: mysql:8.0
@@ -45,9 +43,7 @@ services:
 
   backend:
     image: lamteknik-webapp-backend:local
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
+    pull_policy: never
     container_name: lamteknik-webapp-backend
     restart: unless-stopped
     environment:
@@ -85,14 +81,7 @@ services:
 
   frontend:
     image: lamteknik-webapp-frontend:local
-    build:
-      context: ../frontend/lamteknik-web
-      dockerfile: Dockerfile
-      args:
-        NEXT_PUBLIC_API_URL: /api/v1
-        NEXT_PUBLIC_FRONTEND_URL: http://10.9.23.41:3002
-        NEXT_PUBLIC_IPFS_GATEWAY: http://10.9.23.40:8080
-        BACKEND_INTERNAL_URL: http://backend:3000
+    pull_policy: never
     container_name: lamteknik-webapp-frontend
     restart: unless-stopped
     environment:

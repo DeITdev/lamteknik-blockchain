@@ -14,6 +14,11 @@ ENV NEXT_PUBLIC_IPFS_GATEWAY=$NEXT_PUBLIC_IPFS_GATEWAY
 ARG NEXT_PUBLIC_FRONTEND_URL
 ENV NEXT_PUBLIC_FRONTEND_URL=$NEXT_PUBLIC_FRONTEND_URL
 
+# Rewrites are compiled into the Next.js routes manifest, so the internal
+# backend destination must also be available during the image build.
+ARG BACKEND_INTERNAL_URL=http://backend:3000
+ENV BACKEND_INTERNAL_URL=$BACKEND_INTERNAL_URL
+
 # Install dependencies
 COPY package*.json ./
 RUN npm ci
