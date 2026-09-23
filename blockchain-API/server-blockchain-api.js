@@ -80,7 +80,8 @@ function loadEntities(target, artifactsDir = target.artifactsDir, registryPrefix
       if (!address) continue;
       const entityName = toEntityName(contractName);
       const generatedSlug = toEntitySlug(contractName);
-      entities.push({ artifact, contractName, entityName, entitySlug: routeSlugs[generatedSlug] || generatedSlug, address, registryKey: artifact.registryKey || `${registryPrefix}:${contractName}`, contract: new ethers.Contract(address, artifact.abi, target.provider) });
+      const totalMethod = artifact.abi.find((item) => item.type === "function" && item.name.startsWith("getTotal"))?.name;
+      entities.push({ artifact, contractName, entityName, entitySlug: routeSlugs[generatedSlug] || generatedSlug, address, registryKey: artifact.registryKey || `${registryPrefix}:${contractName}`, totalMethod, contract: new ethers.Contract(address, artifact.abi, target.provider) });
     } catch (error) { console.warn(`[gateway] Failed to load ${target.id}/${file}: ${error.message}`); }
   }
   return entities;
@@ -91,8 +92,8 @@ let erpEntities = loadEntities(TARGETS.besu, ERP_ARTIFACTS_DIR, "ERPNext", ERP_R
 function targetDetails(target) { return { target: target.id, label: target.label, chainId: target.chainId, rpcUrl: target.rpcUrl, signerMode: target.signerMode, contractsLoaded: entitiesByTarget.get(target.id).length }; }
 
 function entityRouter(target, entity) {
-  const { entitySlug, entityName, contract, contractName, address, registryKey } = entity;
-  const get = `get${entityName}`, getMeta = `${get}Metadata`, exists = `does${entityName}Exist`, total = `getTotal${entityName}`, ids = `getAll${entityName}Ids`, index = `${get}IdByIndex`, store = `store${entityName}`;
+  const { entitySlug, entityName, contract, contractName, address, registryKey, totalMethod } = entity;
+  const get = `get${entityName}`, getMeta = `${get}Metadata`, exists = `does${entityName}Exist`, total = totalMethod || `getTotal${entityName}`, ids = `getAll${entityName}Ids`, index = `${get}IdByIndex`, store = `store${entityName}`;
   const fail = (res, error) => res.status(500).json({ success: false, target: target.id, error: error.message });
   const router = express.Router();
   router.get("/count", async (_req, res) => { try { res.json({ success: true, target: target.id, entity: entitySlug, count: toJsonSafe(await contract[total]()) }); } catch (error) { fail(res, error); } });
@@ -151,7 +152,20 @@ function mountFabricEntityRoutes(app) {
   });
 }
 function entitiesHandler(target, prefix) { return (_req, res) => { const entities = entitiesByTarget.get(target.id); res.json({ success: true, ...targetDetails(target), entities: entities.map((entity) => ({ entity: entity.entitySlug, contractName: entity.contractName, registryKey: entity.registryKey, address: entity.address, basePath: `${prefix}/lamteknik/${entity.entitySlug}` })) }); }; }
-function contractsHandler(target) { return (_req, res) => res.json({ success: true, ...targetDetails(target), contracts: Object.fromEntries(entitiesByTarget.get(target.id).map((entity) => [entity.entitySlug, { contractName: entity.contractName, registryKey: entity.registryKey, address: entity.address }])) }); }
+function contractCatalog(entities) {
+  return {
+    contractsLoaded: entities.length,
+    contracts: Object.fromEntries(entities.map((entity) => [entity.entitySlug, { contractName: entity.contractName, registryKey: entity.registryKey, address: entity.address }])),
+  };
+}
+function contractsHandler(target) {
+  return (_req, res) => {
+    const applications = { lamteknik: contractCatalog(entitiesByTarget.get(target.id)) };
+    if (target.id === "besu") applications.erpnext = contractCatalog(erpEntities);
+    const contractsLoaded = Object.values(applications).reduce((total, application) => total + application.contractsLoaded, 0);
+    res.json({ success: true, ...targetDetails(target), contractsLoaded, applications });
+  };
+}
 function runDeploy(targetId, entitiesFilter) {
   return new Promise((resolve, reject) => {
     const target = TARGETS[targetId]; const env = { ...process.env, BLOCKCHAIN_TARGET: targetId, BLOCKCHAIN_RPC_URL: target.rpcUrl, CHAIN_ID: String(target.chainId) }; if (entitiesFilter?.length) env.LAMTEKNIK_ONLY = entitiesFilter.join(",");

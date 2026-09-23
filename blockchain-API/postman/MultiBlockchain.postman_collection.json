@@ -1,8 +1,8 @@
 {
   "info": {
     "_postman_id": "a7c2d3e4-5f6a-7b8c-9d0e-lamteknik0003",
-    "name": "LamTeknik Multi-Blockchain API",
-    "description": "Besu, Go Ethereum, and Hyperledger Fabric are explicit gateway targets. Records never cross targets: Fabric calls the lamteknik-ledger chaincode, while Besu and Go Ethereum use their own EVM contracts. Select the LamTeknik (local multi-blockchain) environment.",
+    "name": "MultiBlockchain API",
+    "description": "Besu, Go Ethereum, and Hyperledger Fabric are explicit gateway targets. Records never cross targets: Fabric calls the lamteknik-ledger chaincode, while Besu and Go Ethereum use their own EVM contracts. Select the MultiBlockchain (local) environment.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "event": [{
@@ -22,13 +22,25 @@
       "item": [
         {"name": "Diagnostics", "item": [
           {"name": "GET Besu health", "request": {"method": "GET", "url": "{{baseUrl}}{{besuPath}}/health"}},
-          {"name": "GET Besu entities", "request": {"method": "GET", "url": "{{baseUrl}}{{besuPath}}/lamteknik"}},
-          {"name": "GET Besu contracts", "request": {"method": "GET", "url": "{{baseUrl}}{{besuPath}}/contracts"}}
+          {"name": "GET Besu contract catalog", "event": [{"listen": "test", "script": {"exec": ["pm.test(\"lists contracts by application\", function () {", "  const body = pm.response.json();", "  pm.expect(body.success).to.eql(true);", "  pm.expect(body.contractsLoaded).to.eql(28);", "  pm.expect(body.applications.lamteknik.contractsLoaded).to.eql(26);", "  pm.expect(body.applications.erpnext.contractsLoaded).to.eql(2);", "  pm.expect(body.applications.erpnext.contracts).to.have.all.keys(\"employees\", \"attendances\");", "});"]}}], "request": {"method": "GET", "url": "{{baseUrl}}{{besuPath}}/contracts"}},
+          {"name": "LamTeknik", "item": [
+            {"name": "GET Besu LamTeknik entities", "request": {"method": "GET", "url": "{{baseUrl}}{{besuPath}}/lamteknik"}}
+          ]},
+          {"name": "ERPNext", "item": [
+            {"name": "GET Besu ERPNext entities", "request": {"method": "GET", "url": "{{baseUrl}}{{besuPath}}/erpnext"}}
+          ]}
         ]},
         {"name": "Entity", "item": [
-          {"name": "GET Besu entity", "event": [{"listen": "test", "script": {"exec": ["pm.test(\"returns a decoded data array\", function () {", "  const body = pm.response.json();", "  pm.expect(body.success).to.eql(true);", "  pm.expect(body.data).to.be.an(\"array\");", "  if (body.data.length) pm.expect(body.data[0]).to.have.property(\"id\");", "});"]}}], "request": {"method": "GET", "url": "{{baseUrl}}{{besuPath}}/lamteknik/{{entity}}"}},
-          {"name": "GET Besu entity count", "request": {"method": "GET", "url": "{{baseUrl}}{{besuPath}}/lamteknik/{{entity}}/count"}},
-          {"name": "POST Besu entity", "request": {"method": "POST", "header": [{"key": "Content-Type", "value": "application/json"}], "body": {"mode": "raw", "raw": "{\n  \"recordId\": \"{{recordId}}\",\n  \"createdTimestamp\": {{createdTimestamp}},\n  \"modifiedTimestamp\": {{modifiedTimestamp}},\n  \"modifiedBy\": \"{{modifiedBy}}\",\n  \"allData\": {{allDataJson}},\n  \"privateKey\": \"{{privateKey}}\"\n}"}, "url": "{{baseUrl}}{{besuPath}}/lamteknik/{{entity}}"}}
+          {"name": "LamTeknik", "item": [
+            {"name": "GET Besu LamTeknik entity", "event": [{"listen": "test", "script": {"exec": ["pm.test(\"returns a decoded data array\", function () {", "  const body = pm.response.json();", "  pm.expect(body.success).to.eql(true);", "  pm.expect(body.data).to.be.an(\"array\");", "  if (body.data.length) pm.expect(body.data[0]).to.have.property(\"id\");", "});"]}}], "request": {"method": "GET", "url": "{{baseUrl}}{{besuPath}}/lamteknik/{{entity}}"}},
+            {"name": "GET Besu LamTeknik entity count", "request": {"method": "GET", "url": "{{baseUrl}}{{besuPath}}/lamteknik/{{entity}}/count"}},
+            {"name": "POST Besu LamTeknik entity", "request": {"method": "POST", "header": [{"key": "Content-Type", "value": "application/json"}], "body": {"mode": "raw", "raw": "{\n  \"recordId\": \"{{recordId}}\",\n  \"createdTimestamp\": {{createdTimestamp}},\n  \"modifiedTimestamp\": {{modifiedTimestamp}},\n  \"modifiedBy\": \"{{modifiedBy}}\",\n  \"allData\": {{allDataJson}},\n  \"privateKey\": \"{{privateKey}}\"\n}"}, "url": "{{baseUrl}}{{besuPath}}/lamteknik/{{entity}}"}}
+          ]},
+          {"name": "ERPNext", "item": [
+            {"name": "GET Besu ERPNext entity", "event": [{"listen": "test", "script": {"exec": ["pm.test(\"returns an ERPNext data array\", function () {", "  const body = pm.response.json();", "  pm.expect(body.success).to.eql(true);", "  pm.expect(body.data).to.be.an(\"array\");", "});"]}}], "request": {"method": "GET", "url": "{{baseUrl}}{{besuPath}}/erpnext/{{erpEntity}}"}},
+            {"name": "GET Besu ERPNext entity count", "request": {"method": "GET", "url": "{{baseUrl}}{{besuPath}}/erpnext/{{erpEntity}}/count"}},
+            {"name": "POST Besu ERPNext entity", "request": {"method": "POST", "header": [{"key": "Content-Type", "value": "application/json"}], "body": {"mode": "raw", "raw": "{\n  \"recordId\": \"{{recordId}}\",\n  \"createdTimestamp\": {{createdTimestamp}},\n  \"modifiedTimestamp\": {{modifiedTimestamp}},\n  \"modifiedBy\": \"{{modifiedBy}}\",\n  \"allData\": {{allDataJson}},\n  \"privateKey\": \"{{privateKey}}\"\n}"}, "url": "{{baseUrl}}{{besuPath}}/erpnext/{{erpEntity}}"}}
+          ]}
         ]}
       ]
     },

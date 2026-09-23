@@ -4,8 +4,8 @@ Importable Postman collection + environment for [API/server-blockchain-api.js](.
 
 Files in this folder:
 
-- `LamTeknik.postman_collection.json` - separate Besu and Go Ethereum diagnostic/entity folders
-- `LamTeknik.postman_environment.json` - shared payload values plus explicit `besuPath` and `gethPath` namespaces
+- `MultiBlockchain.postman_collection.json` - separate Besu and Go Ethereum diagnostic/entity folders
+- `MultiBlockchain.postman_environment.json` - shared payload values plus explicit `besuPath` and `gethPath` namespaces
 
 ## Import (3 steps)
 

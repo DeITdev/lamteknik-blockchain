@@ -20,8 +20,8 @@ API/
 ├── server-blockchain-api.js      # Express server — single entry point
 ├── build/contracts/lamteknik/    # Runtime artifacts loaded at startup (ABI + address)
 ├── postman/
-│   ├── LamTeknik.postman_collection.json
-│   └── LamTeknik.postman_environment.json
+│   ├── MultiBlockchain.postman_collection.json
+│   └── MultiBlockchain.postman_environment.json
 └── .env                          # Port, RPC URL, chain ID, default signer
 ```
 
@@ -157,8 +157,8 @@ Expected: `"status": "healthy"` and `"contractsLoaded": 26`.
 
 Postman files are in `API/postman/`:
 
-- `LamTeknik.postman_collection.json` — 11 requests (3 diagnostics + 8 entity-templated)
-- `LamTeknik.postman_environment.json` — local environment variables
+- `MultiBlockchain.postman_collection.json` — reusable multi-network request collection
+- `MultiBlockchain.postman_environment.json` — local environment variables
 
 ### 1. Import collection and environment
 
