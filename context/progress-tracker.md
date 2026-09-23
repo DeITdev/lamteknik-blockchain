@@ -4,12 +4,13 @@ Update this file after every meaningful implementation change.
 
 ## Current Phase
 
-**Single-event Besu smoke test** — local source backend is healthy and the scoped Besu contracts are deployed; waiting for the operator's Postman verification before creating a CDC event.
+**Application UI smoke test** — the VM `.41` backend and frontend are running and login is verified; CDC remains stopped while the `.40` Besu service is restored.
 
 ## Current Goal
 
-- Verify the Besu deployment through Postman.
-- Validate one end-to-end CDC event only after the operator approves the deployment.
+- Let the operator verify the UI at `http://10.9.23.41:3002`.
+- Restore Besu connectivity behind the `.40` gateway.
+- Validate one end-to-end CDC event only after both checks pass.
 
 ---
 
@@ -41,20 +42,23 @@ Update this file after every meaningful implementation change.
 
 ### Frontend, target, connection
 
-- See prior entries — unchanged.
+- **VM `.41` application smoke setup (2026-09-23)** — NestJS runs on `:3000` with direct blockchain integration disabled; Next.js runs on `0.0.0.0:3002` and proxies `/api/v1` to NestJS. Four demo users were seeded and admin login was verified without creating an Akreditasi row.
+- See prior connection entries — unchanged; the CDC consumer remains stopped.
 
 ---
 
 ## In Progress
 
-- Operator Postman verification of the scoped Besu deployment.
+- Operator browser verification of the VM `.41` frontend.
+- Restore `.40` Besu RPC connectivity; the gateway currently reports `ECONNREFUSED 127.0.0.1:8545` while retaining the loaded Akreditasi artifact.
 
 ---
 
 ## Next Up
 
-1. **Postman check** — confirm the deployed Akreditasi contract through the `.40` gateway.
-2. **CDC smoke test** — start the required CDC path and create exactly one event after operator approval.
+1. **Browser check** — confirm landing page, login, and dashboard at `http://10.9.23.41:3002`.
+2. **Besu recovery** — restore the `.40` chain without deleting its volumes or deployment artifacts.
+3. **CDC smoke test** — start the required CDC path and create exactly one event after operator approval.
 
 ---
 
@@ -76,3 +80,4 @@ Update this file after every meaningful implementation change.
 - 2026-09-23: Rebuilt and recreated only the `.40` `lamteknik-gateway` service. Its runtime Hardhat CLI is `3.9.0`; Besu health remains successful on chain `1337` with `contractsLoaded: 0` and an empty contracts response. No contract deployment, CDC event, Besu restart, volume deletion, or artifact removal occurred.
 - 2026-09-23: From VM `.41`, deployed `ContractRegistry` at `0x0Be199A777EECc870a7b13045946Fef1803Dd9e1` and only `AkreditasiStorage` at `0xf03b5af17792D7F7707dc54474083BaCAD17e22F`. Gateway verification reported `contractsLoaded: 1`, registry key `LamTeknik:AkreditasiStorage`, and healthy Besu chain ID `1337`. Stopped before starting the CDC consumer or generating an event so the operator can verify with Postman.
 - 2026-09-23: Rebuilt only the `.40` gateway to make entity routes resolve from the current loaded contract map after a deployment. `GET /blockchains/besu/lamteknik/akreditasi` now succeeds and returns the contract's empty state; no CDC consumer or application event was started.
+- 2026-09-23: Installed and built the Next.js frontend, configured its same-origin `/api/v1` proxy, and exposed it at `http://10.9.23.41:3002`. Seeded four demo users and verified backend health, landing page, login page, proxied health, and admin login with HTTP 200. The SQL `akreditasi` table remained empty and CDC was not started. A final chain check found the `.40` gateway running but Besu RPC unavailable at `127.0.0.1:8545`; this must be restored before the CDC event test.
