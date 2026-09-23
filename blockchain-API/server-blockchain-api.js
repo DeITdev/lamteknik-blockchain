@@ -127,12 +127,24 @@ function mountEntityRoutes(app, target, entity, routePrefix, moduleName = "lamte
   app.use(`${routePrefix}/${moduleName}/${entity.entitySlug}`, entityRouter(target, entity));
 }
 function erpAuditRouter(target, entity) {
-  const { entityName, entitySlug, contract, contractName, address, registryKey } = entity;
-  const get = `get${entityName}`, getVersion = `${get}Version`, count = `${get}VersionCount`, eventExists = `does${entityName}EventExist`, verify = `verify${entityName}Version`, store = `store${entityName}`;
+  const { entityName, entitySlug, contract, contractName, address, registryKey, totalMethod } = entity;
+  const get = `get${entityName}`, getVersion = `${get}Version`, count = `${get}VersionCount`, total = totalMethod || `getTotal${entityName}`, ids = `getAll${entityName}Ids`, eventExists = `does${entityName}EventExist`, verify = `verify${entityName}Version`, store = `store${entityName}`;
   const fail = (res, error) => res.status(500).json({ success: false, target: target.id, application: "erpnext", entity: entitySlug, error: error.message });
+  const versionData = (value) => ({
+    version: toJsonSafe(value.version ?? value[0]),
+    createdTimestamp: toJsonSafe(value.createdTimestamp ?? value[1]),
+    modifiedTimestamp: toJsonSafe(value.modifiedTimestamp ?? value[2]),
+    modifiedBy: value.modifiedBy ?? value[3],
+    payloadHash: value.payloadHash ?? value[4],
+    sourceEventId: value.sourceEventId ?? value[5],
+    deleted: Boolean(value.deleted ?? value[6]),
+  });
   const router = express.Router();
-  router.get("/:recordId", async (req, res) => { try { res.json({ success: true, target: target.id, application: "erpnext", entity: entitySlug, recordId: req.params.recordId, data: pickNamedResult(await contract[get](req.params.recordId)) }); } catch (error) { fail(res, error); } });
-  router.get("/:recordId/versions", async (req, res) => { try { const total = Number(await contract[count](req.params.recordId)); const versions = await Promise.all(Array.from({ length: total }, (_, index) => contract[getVersion](req.params.recordId, BigInt(index + 1)))); res.json({ success: true, target: target.id, application: "erpnext", entity: entitySlug, recordId: req.params.recordId, data: versions.map(pickNamedResult) }); } catch (error) { fail(res, error); } });
+  router.get("/count", async (_req, res) => { try { res.json({ success: true, target: target.id, application: "erpnext", entity: entitySlug, count: toJsonSafe(await contract[total]()) }); } catch (error) { fail(res, error); } });
+  router.get("/ids", async (_req, res) => { try { res.json({ success: true, target: target.id, application: "erpnext", entity: entitySlug, ids: toJsonSafe(await contract[ids]()) }); } catch (error) { fail(res, error); } });
+  router.get("/", async (_req, res) => { try { const recordIds = await contract[ids](); const data = await Promise.all(recordIds.map(async (recordId) => ({ recordId: String(recordId), ...versionData(await contract[get](recordId)) }))); res.json({ success: true, target: target.id, application: "erpnext", entity: entitySlug, data }); } catch (error) { fail(res, error); } });
+  router.get("/:recordId", async (req, res) => { try { res.json({ success: true, target: target.id, application: "erpnext", entity: entitySlug, recordId: req.params.recordId, data: versionData(await contract[get](req.params.recordId)) }); } catch (error) { fail(res, error); } });
+  router.get("/:recordId/versions", async (req, res) => { try { const total = Number(await contract[count](req.params.recordId)); const versions = await Promise.all(Array.from({ length: total }, (_, index) => contract[getVersion](req.params.recordId, BigInt(index + 1)))); res.json({ success: true, target: target.id, application: "erpnext", entity: entitySlug, recordId: req.params.recordId, data: versions.map(versionData) }); } catch (error) { fail(res, error); } });
   router.post("/verify", async (req, res) => { try { const { recordId, version, allData } = req.body || {}; if (!recordId || !version || allData === undefined) return res.status(400).json({ success: false, error: "recordId, version, and allData are required" }); const hash = payloadHash(allData); const valid = await contract[verify](String(recordId), BigInt(version), hash); res.json({ success: true, target: target.id, application: "erpnext", entity: entitySlug, recordId: String(recordId), version: Number(version), payloadHash: hash, valid }); } catch (error) { fail(res, error); } });
   router.post("/", async (req, res) => {
     try {
