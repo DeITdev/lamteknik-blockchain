@@ -31,35 +31,35 @@ yarn-error.log*
 repo/
 
 # blockchain data
-backend/blockchain-besu-ibft/Node-*/data/DATABASE_METADATA.json
-backend/blockchain-besu-ibft/Node-*/data/VERSION_METADATA.json
-backend/blockchain-besu-ibft/Node-*/data/besu.networks
-backend/blockchain-besu-ibft/Node-*/data/besu.ports
-backend/blockchain-besu-ibft/Node-*/data/caches/
-backend/blockchain-besu-ibft/Node-*/data/database/
+blockchain/blockchain-besu-ibft/Node-*/data/DATABASE_METADATA.json
+blockchain/blockchain-besu-ibft/Node-*/data/VERSION_METADATA.json
+blockchain/blockchain-besu-ibft/Node-*/data/besu.networks
+blockchain/blockchain-besu-ibft/Node-*/data/besu.ports
+blockchain/blockchain-besu-ibft/Node-*/data/caches/
+blockchain/blockchain-besu-ibft/Node-*/data/database/
 
 # Go Ethereum runtime data
-backend/go-ethereum/data/
+blockchain/go-ethereum/data/
 
 # Hyperledger Fabric bootstrap and runtime data
-backend/hyperledger-fabric/fabric-samples/
-backend/hyperledger-fabric/bin/
-backend/hyperledger-fabric/config/
-backend/hyperledger-fabric/install-fabric.sh
-backend/hyperledger-fabric/docker/explorer/organizations/
-backend/hyperledger-fabric/docker/explorer/walletstore/
-!backend/hyperledger-fabric/docker/.env
+blockchain/hyperledger-fabric/fabric-samples/
+blockchain/hyperledger-fabric/bin/
+blockchain/hyperledger-fabric/config/
+blockchain/hyperledger-fabric/install-fabric.sh
+blockchain/hyperledger-fabric/docker/explorer/organizations/
+blockchain/hyperledger-fabric/docker/explorer/walletstore/
+blockchain/hyperledger-fabric/docker/.env
 
-# ipfs cluster runtime data
-backend/ipfs-cluster-private/compose/
-backend/ipfs-cluster-private/swarm.key
-backend/ipfs-cluster-private/assets/webui-v4.12.0.car
+# IPFS Cluster runtime data
+blockchain/ipfs-cluster-private/compose/
+blockchain/ipfs-cluster-private/swarm.key
+blockchain/ipfs-cluster-private/assets/webui-v4.13.0.car
 
 # API runtime / build output
-API/node_modules/
-API/build/
-API/artifacts/
-API/cache/
+blockchain-API/node_modules/
+blockchain-API/build/
+blockchain-API/artifacts/
+blockchain-API/cache/
 
 # connection / CDC consumer
 connection/consumer-lamteknik/.env.local
