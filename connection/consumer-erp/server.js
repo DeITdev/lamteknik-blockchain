@@ -33,7 +33,7 @@ function parseChange(messageValue) {
   return { data: event, isDelete: event.__deleted === true || event.__deleted === "true", operation: "u" };
 }
 
-function transformForGateway(tableName, data, isDelete) {
+function transformForGateway(tableName, data, isDelete, sourceEventId) {
   const recordId = data.name;
   if (!recordId) throw new Error(`Missing name for ${tableName}`);
   const { name, creation, modified, modified_by, ...allData } = data;
@@ -44,6 +44,8 @@ function transformForGateway(tableName, data, isDelete) {
     modifiedTimestamp: unixSeconds(modified),
     modifiedBy: String(modified_by || "debezium@cdc"),
     allData: JSON.stringify(allData),
+    sourceEventId,
+    deleted: isDelete,
   };
 }
 
@@ -62,7 +64,7 @@ async function send(route, payload) {
   return response.data;
 }
 
-async function processMessage(topic, message) {
+async function processMessage(topic, message, partition = 0) {
   const tableName = topic.split(".").pop();
   if (!TARGET_TABLES.includes(tableName)) return { action: "ignored" };
   if (!message.value) return { action: "tombstone" };
@@ -71,7 +73,7 @@ async function processMessage(topic, message) {
   if (isDelete && !WRITE_DELETES) return { action: "delete-skipped" };
   const route = TABLE_ROUTES[tableName];
   if (!route) throw new Error(`No gateway route for ${tableName}`);
-  const payload = transformForGateway(tableName, data, isDelete);
+  const payload = transformForGateway(tableName, data, isDelete, `${topic}:${partition}:${message.offset}`);
   if (!SKIP_BLOCKCHAIN_CHECK) {
     const existing = await existingRecord(route, payload.recordId);
     if (!isDelete && isEqualOrNewer(existing, payload.modifiedTimestamp)) return { action: "stale" };
@@ -98,7 +100,7 @@ async function start() {
   while (!topics.length) { console.log("Waiting for ERPNext CDC topics..."); await new Promise((resolve) => setTimeout(resolve, 10000)); topics = await discoverTopics(kafka); }
   await consumer.subscribe({ topics, fromBeginning: false });
   await consumer.run({ autoCommit: false, eachMessage: async ({ topic, partition, message }) => {
-    const result = await processMessage(topic, message);
+    const result = await processMessage(topic, message, partition);
     await consumer.commitOffsets([{ topic, partition, offset: (BigInt(message.offset) + 1n).toString() }]);
     console.log(`[OK] ${topic}[${partition}] offset ${message.offset}: ${result.action}`);
   } });

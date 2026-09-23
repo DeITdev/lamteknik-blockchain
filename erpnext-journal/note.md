@@ -1,65 +1,43 @@
-Here is the complete summary of changes required for the manuscript based on the reviewer and editor annotations present in the document:
+# BEEI ERPNext–Blockchain Revision Evidence Checklist
 
-### 1\. Title Reformulation
+## Source and status
 
-  * **Reviewer D.1 Annotation:** Reformulate the paper title to be more concise and compact while retaining its core scope and main research contribution.
+`Jurnal BEEI ERP Blockchain Revisi v.1.pdf` contains the revised manuscript but no machine-readable reviewer annotations. The earlier reviewer labels are an internal editorial checklist, not quotations from the PDF. Do not state a result in the manuscript until its test artifact, environment, and raw result are retained.
 
------
+## Required manuscript corrections
 
-### 2\. Abstract Section
+1. **Integrity claim:** Replace the old description of replaceable on-chain JSON and a nonexistent `verifyRecord()` function. The implemented design anchors an append-only version for each Employee/Attendance CDC event containing `recordId`, version, SHA-256 hash of canonical JSON, source modification metadata, deletion flag, and Kafka source-event ID. Full HR JSON remains off-chain.
+2. **Tamper-evidence wording:** State precisely that an authorized auditor can hash a supplied ERP export and compare it with an on-chain version. A changed export produces a different hash; a later CDC event creates a new version without overwriting earlier versions. Do not claim automatic detection of every privileged database edit without a defined audit workflow.
+3. **Runtime accuracy:** Reconcile every version/topology statement with the deployed experiment. The current CDC stack is Kafka 4.3.1 KRaft and Debezium 3.6.2 with MariaDB 11.8; do not describe a ZooKeeper/Confluent or MariaDB 10.6 setup unless it is the tested experiment.
+4. **Performance claims:** Replace the existing fixed latency, TPS, success-rate, and 2–10-validator values unless reproduced. Report only measured four-validator Besu results initially. Every table/figure needs an in-text citation before it appears.
+5. **Comparisons:** Measure centralized ERPNext/MariaDB as the local baseline. Do not present Odoo/SAP/monolithic-chain values as experimental results unless those systems are actually deployed and measured; use related-work citations instead.
+6. **Editorial items:** Compact the title; define rather than market “customizable”; make the research gap and Super-user Paradox explicit; audit citations/IEEE formatting; add the requested architecture/CDC-flow diagram and failure-recovery subsection; discuss PII retention, audit workflow, and IBFT sustainability limits.
 
-  * **Reviewer B & Editor Annotations:**
-      * Quantify key contributions by including explicit quantitative metrics (e.g., DB-to-Kafka latency, transaction latency, throughput in TPS, and consensus success rates).
-      * Remove vague terms like "novel" or "customizable" unless explicitly defined.
-      * End the abstract with a clear closing statement outlining the overall practical impact and contribution of the system.
+## Required test evidence
 
------
+### A. Functional CDC and audit proof
 
-### 3\. Introduction & Literature Positioning
+For one Employee and one Attendance record, run create, update, and delete cases. Preserve the ERP record ID, Kafka topic/partition/offset, source-event ID, consumer log, gateway response, transaction hash, block number, and retrieved on-chain version. Verify that the raw HR JSON is absent from the contract read response and transaction request to the contract.
 
-  * **Editor Comment 1 / Reviewers B, D.2, D.4 Annotation:**
-      * Clarify the exact research gap addressed in the study, specifically highlighting the "Super-user Paradox" where administrative users can modify records and purge audit logs in open-source ERP systems.
-      * Explicitly position this work against closely related prior systems (e.g., monolithic ERPs, custom HIS, SAP/Oracle).
-      * Re-examine author and journal self-citations to ensure objective coverage and incorporate foundational literature to strengthen the theoretical background.
+### B. Tamper and version-history test
 
------
+1. Anchor version 1 from a known canonical ERP export.
+2. Re-hash the same export through `POST /blockchains/besu/erpnext/{employees|attendances}/verify`; it must return `valid: true`.
+3. Change one protected ERP field, then verify the changed export against version 1; it must return `valid: false`.
+4. Process the CDC change, verify version 2 is created, and confirm version 1 remains retrievable with its original hash.
 
-### 4\. Methodology, Architecture & System Robustness
+### C. Delivery and recovery test
 
-  * **Reviewers A & C.3 Annotation:**
-      * Provide a detailed diagram showing how HR sub-modules (payroll, attendance, recruitment) integrate with the Frappe framework and the blockchain layer.
-      * Add pseudocode or flowcharts detailing the event-driven Change Data Capture (CDC) pipeline and consumer execution logic.
-      * Add a dedicated **Subsection 2.7 (System Robustness and Failure Recovery)** addressing:
-          * Handling of Kafka consumer crashes and manual offset commits.
-          * System recovery during temporary blockchain network unavailability.
-          * At-least-once delivery semantics, record-ID-based idempotency, and replay safety.
+Re-send a consumed Kafka event and verify its source-event ID returns a successful duplicate acknowledgement without a second version. Stop the consumer before confirmation and restart it. Temporarily make the gateway/Besu unavailable, restore it, and verify the Kafka offset is committed only after a successful or duplicate-confirmed result.
 
------
+### D. Performance experiment
 
-### 5\. Results & Comparative Performance
+For 1, 10, 50, 100, 150, 200, and 250 records, execute at least 30 repetitions per workload. Record database-commit→Kafka, Kafka→consumer, queue delay, gateway→Besu confirmation, end-to-end latency, consumer lag, success rate, mean, standard deviation, p50, and p95. Record hardware, image/package versions, validator count, block settings, data shape, warm-up, and failed runs. Report the centralized ERPNext/MariaDB write measurement separately as the local baseline.
 
-  * **Reviewers C.1, C.2, D.3 Annotation:**
-      * Ensure all figures (Figures 1–5) and tables (Tables 1–6) are explicitly cited and explained in the text *before* they appear in the document.
-      * Add a comparative baseline analysis (e.g., Table 7) benchmarking performance across three configurations:
-        1.  Traditional Centralized ERP (ERPNext / MariaDB)
-        2.  Monolithic On-Chain ERP (Odoo + Blockchain)
-        3.  Proposed System (Frappe + CDC + Hyperledger Besu)
-      * Discuss potential bottlenecks in detail, such as linear queue time accumulation during bulk operations.
+## Acceptance criteria for the revised claims
 
------
-
-### 6\. Discussion, Compliance & Future Directions
-
-  * **Reviewers C.4 & E Annotation:**
-      * Expand the discussion to cover socio-technical and regulatory compliance, addressing GDPR mandates (e.g., "Right to be Forgotten" via on-chain hash anchoring vs. off-chain PII storage) and labor law auditability.
-      * Discuss energy efficiency and sustainability trade-offs of IBFT 2.0 private consensus compared to public Proof-of-Work networks.
-      * Outline concrete technical directions for future work, including transaction batching, Merkle-tree root aggregation, off-chain IPFS storage, and auditor verification portals.
-
------
-
-### 7\. References & Template Formatting
-
-  * **Editor Comment 3 Annotation:**
-      * Ensure all references strictly follow IEEE style, including complete volume, issue, page numbers, and DOIs.
-      * Audit and remove unnecessary author and BEEI/IAES publisher self-citations.
-      * Align the Acknowledgments, Funding Information, and CRediT Author Contributions sections with the standard BEEI journal template formatting.
+- A contract version never overwrites an earlier version.
+- Identical Kafka source-event IDs never create a second version.
+- Hash verification passes for the original export and fails for a changed export.
+- A gateway/Besu outage does not cause an early Kafka offset commit or data loss.
+- Every published number has a reproducible run artifact; unsupported historical numbers are removed or labelled as non-experimental literature context.

@@ -30,6 +30,7 @@ async function main() {
   if (!ethers) throw new Error("Hardhat ethers plugin is unavailable");
   const chainId = Number(process.env.BESU_CHAIN_ID || process.env.CHAIN_ID || 1337);
   const buildDir = path.join(__dirname, "..", "build", "chains", "besu", "contracts", "erpnext");
+  const forceRedeploy = process.env.FORCE_ERP_REDEPLOY === "true";
   const registryArtifact = await artifacts.readArtifact("ContractRegistry");
   const Registry = await ethers.getContractFactory("ContractRegistry");
   const existingArtifactPath = path.join(__dirname, "..", "build", "chains", "besu", "contracts", "lamteknik", "ContractRegistry.json");
@@ -54,7 +55,7 @@ async function main() {
     const artifact = await artifacts.readArtifact(fqn);
     let address;
     let blockNumber;
-    if (await registry.isContractDeployed(registryKey)) {
+    if (!forceRedeploy && await registry.isContractDeployed(registryKey)) {
       address = await registry.getContract(registryKey);
       console.log(`Using ${registryKey} at ${address}`);
     } else {
@@ -63,7 +64,7 @@ async function main() {
       address = await instance.getAddress();
       blockNumber = receipt?.blockNumber;
       await (await registry.registerContract(registryKey, address)).wait();
-      console.log(`Deployed ${registryKey} at ${address}`);
+      console.log(`Deployed ${registryKey} at ${address}${forceRedeploy ? " (registry updated)" : ""}`);
     }
     writeArtifact(buildDir, chainId, name, registryKey, artifact, address, blockNumber);
   }

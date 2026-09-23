@@ -1,47 +1,43 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
+/// @notice Append-only ERPNext Employee payload hashes. Full HR payloads never enter contract storage.
 contract EmployeeStorage {
-    struct Employee {
-        string recordId;
+    struct Version {
+        uint256 version;
         uint256 createdTimestamp;
         uint256 modifiedTimestamp;
         string modifiedBy;
-        string allData;
+        bytes32 payloadHash;
+        string sourceEventId;
+        bool deleted;
     }
 
-    mapping(string => Employee) public employees;
-    string[] public employeeIds;
+    mapping(string => Version[]) private versions;
     mapping(string => bool) public employeeExists;
+    mapping(bytes32 => bool) private processedEvents;
+    string[] private employeeIds;
 
-    event EmployeeStored(string indexed recordId, uint256 createdTimestamp, uint256 modifiedTimestamp);
-    event EmployeeUpdated(string indexed recordId, uint256 modifiedTimestamp);
+    event EmployeeVersionStored(string indexed recordId, uint256 indexed version, bytes32 payloadHash, string sourceEventId, bool deleted);
 
-    function storeEmployee(string memory _recordId, uint256 _createdTimestamp, uint256 _modifiedTimestamp, string memory _modifiedBy, string memory _allData) public returns (bool) {
-        bool isNewEmployee = !employeeExists[_recordId];
-        employees[_recordId] = Employee(_recordId, _createdTimestamp, _modifiedTimestamp, _modifiedBy, _allData);
-        if (isNewEmployee) {
-            employeeIds.push(_recordId);
-            employeeExists[_recordId] = true;
-            emit EmployeeStored(_recordId, _createdTimestamp, _modifiedTimestamp);
-        } else {
-            emit EmployeeUpdated(_recordId, _modifiedTimestamp);
-        }
-        return true;
+    function storeEmployee(string memory recordId, uint256 createdTimestamp, uint256 modifiedTimestamp, string memory modifiedBy, bytes32 payloadHash, string memory sourceEventId, bool deleted) public returns (uint256) {
+        require(bytes(recordId).length > 0, "Missing record ID");
+        require(bytes(sourceEventId).length > 0, "Missing source event ID");
+        bytes32 eventKey = keccak256(abi.encode(recordId, sourceEventId));
+        require(!processedEvents[eventKey], "Source event already stored");
+        processedEvents[eventKey] = true;
+        if (!employeeExists[recordId]) { employeeExists[recordId] = true; employeeIds.push(recordId); }
+        uint256 version = versions[recordId].length + 1;
+        versions[recordId].push(Version(version, createdTimestamp, modifiedTimestamp, modifiedBy, payloadHash, sourceEventId, deleted));
+        emit EmployeeVersionStored(recordId, version, payloadHash, sourceEventId, deleted);
+        return version;
     }
 
-    function getEmployee(string memory _recordId) public view returns (string memory, uint256, uint256, string memory, string memory) {
-        require(employeeExists[_recordId], "Employee does not exist");
-        Employee memory employee = employees[_recordId];
-        return (employee.recordId, employee.createdTimestamp, employee.modifiedTimestamp, employee.modifiedBy, employee.allData);
-    }
+    function getEmployee(string memory recordId) public view returns (Version memory) { require(employeeExists[recordId], "Employee does not exist"); return versions[recordId][versions[recordId].length - 1]; }
+    function getEmployeeVersion(string memory recordId, uint256 version) public view returns (Version memory) { require(version > 0 && version <= versions[recordId].length, "Version does not exist"); return versions[recordId][version - 1]; }
+    function getEmployeeVersionCount(string memory recordId) public view returns (uint256) { return versions[recordId].length; }
     function getTotalEmployees() public view returns (uint256) { return employeeIds.length; }
-    function getEmployeeIdByIndex(uint256 _index) public view returns (string memory) { require(_index < employeeIds.length, "Index out of bounds"); return employeeIds[_index]; }
     function getAllEmployeeIds() public view returns (string[] memory) { return employeeIds; }
-    function doesEmployeeExist(string memory _recordId) public view returns (bool) { return employeeExists[_recordId]; }
-    function getEmployeeMetadata(string memory _recordId) public view returns (string memory, uint256, uint256, string memory) {
-        require(employeeExists[_recordId], "Employee does not exist");
-        Employee memory employee = employees[_recordId];
-        return (employee.recordId, employee.createdTimestamp, employee.modifiedTimestamp, employee.modifiedBy);
-    }
+    function doesEmployeeEventExist(string memory recordId, string memory sourceEventId) public view returns (bool) { return processedEvents[keccak256(abi.encode(recordId, sourceEventId))]; }
+    function verifyEmployeeVersion(string memory recordId, uint256 version, bytes32 payloadHash) public view returns (bool) { return getEmployeeVersion(recordId, version).payloadHash == payloadHash; }
 }

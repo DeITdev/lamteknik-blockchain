@@ -21,14 +21,16 @@ test("parses Debezium envelope deletes from before", () => {
 });
 
 test("creates the Employee gateway payload without envelope fields", () => {
-  const payload = transformForGateway("tabEmployee", row, false);
+  const payload = transformForGateway("tabEmployee", row, false, "erpnext.db.tabEmployee:0:42");
   assert.equal(payload.recordId, "HR-EMP-00001");
   assert.equal(payload.createdTimestamp, 1790157600);
+  assert.equal(payload.sourceEventId, "erpnext.db.tabEmployee:0:42");
   assert.deepEqual(JSON.parse(payload.allData), { employee_name: "Ada Lovelace" });
 });
 
 test("retains delete meaning in allData and detects a stale target version", () => {
-  const payload = transformForGateway("tabEmployee", row, true);
+  const payload = transformForGateway("tabEmployee", row, true, "erpnext.db.tabEmployee:0:43");
   assert.equal(JSON.parse(payload.allData).__deleted, true);
+  assert.equal(payload.deleted, true);
   assert.equal(isEqualOrNewer({ data: { modifiedTimestamp: String(payload.modifiedTimestamp) } }, payload.modifiedTimestamp), true);
 });
