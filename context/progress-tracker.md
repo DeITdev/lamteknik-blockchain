@@ -4,14 +4,13 @@ Update this file after every meaningful implementation change.
 
 ## Current Phase
 
-**VM `.40` unified stack deployed** — Besu + IPFS + Gateway API running.
+**Single-event Besu smoke-test preparation** — local source backend is healthy; remote contract deployment is waiting for a rebuilt gateway image.
 
 ## Current Goal
 
-- Wire nginx to `:4100` (external).
-- Deploy app + CDC on `.42` per [revamp-system-plan.md](./revamp-system-plan.md) Phase 2.
-- Validate end-to-end CDC smoke test.
-- Run the transferred Geth and Hyperledger Fabric stacks one at a time, then integrate each with the API.
+- Rebuild/redeploy the `.40` gateway with Hardhat available at runtime.
+- Deploy only `ContractRegistry` and `AkreditasiStorage` to Besu.
+- Validate one end-to-end CDC event after the deployment is checked in Postman.
 
 ---
 
@@ -31,6 +30,7 @@ Update this file after every meaningful implementation change.
 - **Gateway hardening (2026-09-03)** — optional `x-api-key` auth, signing queue + nonce manager, IPFS proxy, deploy route.
 - **`API/Dockerfile` + `docker-compose.yml`** — container deploy on `.40`.
 - **Hardhat deploy script** — `npm run deploy:lamteknik`.
+- **Gateway deployment image fix (2026-09-22)** — retain development dependencies in the runtime image because the deployment API invokes the Hardhat CLI; synchronized `API/package-lock.json` with the Fabric dependencies. A clean image build passed and its bundled Hardhat CLI executed successfully.
 - **Guides** — `how-to-smart-contract.md`, `how-to-blockchain-api.md`, `how-to-ipfs-api.md`.
 
 ### Context / VM plans (2026-09-04)
@@ -48,17 +48,16 @@ Update this file after every meaningful implementation change.
 
 ## In Progress
 
-- nginx public URL (external setup).
-- VM `.42` app + CDC deployment.
-- Besu API runtime validation when Besu is next started.
+- Rebuild/redeploy the gateway container on `.40` from the corrected `API/Dockerfile`.
+- Retry the Besu deployment for `AkreditasiStorage`; the first request safely failed before broadcasting because the old image lacked `hardhat`.
 
 ---
 
 ## Next Up
 
-1. **nginx** — point public URL to `10.9.23.40:4100`.
-2. **VM `.42`** — App + CDC stack.
-3. **End-to-end CDC smoke test**.
+1. **Gateway** — rebuild/redeploy the `.40` container.
+2. **Besu contracts** — deploy and verify `ContractRegistry` plus `AkreditasiStorage`.
+3. **Postman check** — let the operator confirm the deployment before starting the CDC consumer or creating an event.
 
 ---
 
@@ -76,3 +75,4 @@ Update this file after every meaningful implementation change.
 - 2026-09-09: Geth development stack started successfully with loopback-only RPC at `127.0.0.1:8555` and Chainlens at `http://127.0.0.1:8082`. Geth and Chainlens are isolated from Besu; API integration remains deferred. Chainlens MongoDB uses `mongo:4.4` because this VM lacks the AVX instructions required by MongoDB 5.0.
 - 2026-09-09: Gateway now exposes separate Besu (`/blockchains/besu`) and Go Ethereum (`/blockchains/go-ethereum`) targets with isolated artifact directories and signing paths. All 26 LamTeknik contracts were deployed to Geth; a Go-Ethereum namespace POST/GET smoke test passed. Besu remains stopped and unmodified.
 - 2026-09-10: Added Hyperledger Fabric Postman target configuration (`/blockchains/hyperledger-fabric`) alongside isolated Besu and Go Ethereum namespaces, including Fabric chaincode health and CDC record requests.
+- 2026-09-22: Started the local NestJS source backend with MySQL and Redis. Added `BLOCKCHAIN_ENABLED=false` support so CDC-source mode does not connect directly to Besu; the backend passed compilation and `/api/v1/health`. Besu on `.40` was healthy and unchanged with zero loaded contracts. The scoped `AkreditasiStorage` deployment stopped safely when the gateway reported `hardhat: not found`; `API/Dockerfile` now installs the runtime deployment dependency. No CDC consumer was started and no CDC event was generated.

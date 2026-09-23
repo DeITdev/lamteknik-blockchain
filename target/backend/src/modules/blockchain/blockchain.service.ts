@@ -73,6 +73,17 @@ export class BlockchainService implements OnModuleInit {
   ) {}
 
   async onModuleInit() {
+    const blockchainEnabled = String(
+      this.configService.get('BLOCKCHAIN_ENABLED', 'true'),
+    ).toLowerCase() === 'true';
+
+    if (!blockchainEnabled) {
+      this.logger.log(
+        'Direct blockchain integration disabled; CDC writes use the external gateway.',
+      );
+      return;
+    }
+
     try {
       await this.connect();
     } catch (error) {
