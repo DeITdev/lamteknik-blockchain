@@ -85,19 +85,19 @@ function loadEntities(target) {
 const entitiesByTarget = new Map(Object.values(TARGETS).map((target) => [target.id, loadEntities(target)]));
 function targetDetails(target) { return { target: target.id, label: target.label, chainId: target.chainId, rpcUrl: target.rpcUrl, signerMode: target.signerMode, contractsLoaded: entitiesByTarget.get(target.id).length }; }
 
-function mountEntityRoutes(app, target, entity, routePrefix) {
+function entityRouter(target, entity) {
   const { entitySlug, entityName, contract, contractName, address, registryKey } = entity;
-  const base = `${routePrefix}/lamteknik/${entitySlug}`;
   const get = `get${entityName}`, getMeta = `${get}Metadata`, exists = `does${entityName}Exist`, total = `getTotal${entityName}`, ids = `getAll${entityName}Ids`, index = `${get}IdByIndex`, store = `store${entityName}`;
   const fail = (res, error) => res.status(500).json({ success: false, target: target.id, error: error.message });
-  app.get(`${base}/count`, async (_req, res) => { try { res.json({ success: true, target: target.id, entity: entitySlug, count: toJsonSafe(await contract[total]()) }); } catch (error) { fail(res, error); } });
-  app.get(`${base}/ids`, async (_req, res) => { try { res.json({ success: true, target: target.id, entity: entitySlug, ids: toJsonSafe(await contract[ids]()) }); } catch (error) { fail(res, error); } });
-  app.get(`${base}/index/:i`, async (req, res) => { try { res.json({ success: true, target: target.id, entity: entitySlug, index: Number(req.params.i), recordId: toJsonSafe(await contract[index](BigInt(req.params.i))) }); } catch (error) { fail(res, error); } });
-  app.get(base, async (_req, res) => { try { res.json({ success: true, target: target.id, entity: entitySlug, data: pickNamedResult(await contract.retrieve()) }); } catch (error) { fail(res, error); } });
-  app.get(`${base}/:recordId/metadata`, async (req, res) => { try { res.json({ success: true, target: target.id, entity: entitySlug, recordId: req.params.recordId, data: pickNamedResult(await contract[getMeta](req.params.recordId)) }); } catch (error) { fail(res, error); } });
-  app.get(`${base}/:recordId/exists`, async (req, res) => { try { res.json({ success: true, target: target.id, entity: entitySlug, recordId: req.params.recordId, exists: Boolean(await contract[exists](req.params.recordId)) }); } catch (error) { fail(res, error); } });
-  app.get(`${base}/:recordId`, async (req, res) => { try { res.json({ success: true, target: target.id, entity: entitySlug, recordId: req.params.recordId, data: pickNamedResult(await contract[get](req.params.recordId)) }); } catch (error) { fail(res, error); } });
-  app.post(base, async (req, res) => {
+  const router = express.Router();
+  router.get("/count", async (_req, res) => { try { res.json({ success: true, target: target.id, entity: entitySlug, count: toJsonSafe(await contract[total]()) }); } catch (error) { fail(res, error); } });
+  router.get("/ids", async (_req, res) => { try { res.json({ success: true, target: target.id, entity: entitySlug, ids: toJsonSafe(await contract[ids]()) }); } catch (error) { fail(res, error); } });
+  router.get("/index/:i", async (req, res) => { try { res.json({ success: true, target: target.id, entity: entitySlug, index: Number(req.params.i), recordId: toJsonSafe(await contract[index](BigInt(req.params.i))) }); } catch (error) { fail(res, error); } });
+  router.get("/", async (_req, res) => { try { res.json({ success: true, target: target.id, entity: entitySlug, data: pickNamedResult(await contract.retrieve()) }); } catch (error) { fail(res, error); } });
+  router.get("/:recordId/metadata", async (req, res) => { try { res.json({ success: true, target: target.id, entity: entitySlug, recordId: req.params.recordId, data: pickNamedResult(await contract[getMeta](req.params.recordId)) }); } catch (error) { fail(res, error); } });
+  router.get("/:recordId/exists", async (req, res) => { try { res.json({ success: true, target: target.id, entity: entitySlug, recordId: req.params.recordId, exists: Boolean(await contract[exists](req.params.recordId)) }); } catch (error) { fail(res, error); } });
+  router.get("/:recordId", async (req, res) => { try { res.json({ success: true, target: target.id, entity: entitySlug, recordId: req.params.recordId, data: pickNamedResult(await contract[get](req.params.recordId)) }); } catch (error) { fail(res, error); } });
+  router.post("/", async (req, res) => {
     try {
       const { recordId, createdTimestamp, modifiedTimestamp, modifiedBy, allData, privateKey } = req.body || {};
       if ([recordId, createdTimestamp, modifiedTimestamp, modifiedBy, allData].some((value) => value === undefined)) return res.status(400).json({ success: false, target: target.id, error: "Missing required body fields: recordId, createdTimestamp, modifiedTimestamp, modifiedBy, allData" });
@@ -108,6 +108,10 @@ function mountEntityRoutes(app, target, entity, routePrefix) {
       res.json({ success: true, target: target.id, entity: entitySlug, contractName, registryKey, contractAddress: address, recordId: String(recordId), transactionHash: receipt.hash, blockNumber: receipt.blockNumber });
     } catch (error) { fail(res, error); }
   });
+  return router;
+}
+function mountEntityRoutes(app, target, entity, routePrefix) {
+  app.use(`${routePrefix}/lamteknik/${entity.entitySlug}`, entityRouter(target, entity));
 }
 
 function healthHandler(target) { return async (_req, res) => { try { res.json({ success: true, status: "healthy", ...targetDetails(target), blockNumber: await target.provider.getBlockNumber() }); } catch (error) { res.status(500).json({ success: false, status: "unhealthy", ...targetDetails(target), error: error.message }); } }; }
@@ -168,8 +172,8 @@ app.get("/blockchains/hyperledger-fabric/contracts", (_req, res) => res.json({ s
 for (const entity of entitiesByTarget.get("besu")) mountEntityRoutes(app, TARGETS.besu, entity, "");
 app.get("/lamteknik", entitiesHandler(TARGETS.besu, "")); app.get("/contracts", contractsHandler(TARGETS.besu));
 app.post("/deploy/lamteknik", requireAdmin, async (req, res) => { try { const result = await runDeploy("besu", Array.isArray(req.body?.entities) ? req.body.entities : undefined); entitiesByTarget.set("besu", loadEntities(TARGETS.besu)); res.json({ success: true, target: "besu", message: "Deploy completed", ...result }); } catch (error) { res.status(500).json({ success: false, target: "besu", error: error.message }); } });
-app.use("/blockchains/:target/lamteknik/:slug", (req, res) => { const target = TARGETS[req.params.target]; if (!target) return res.status(404).json({ success: false, error: `Unknown blockchain target: ${req.params.target}`, availableTargets: Object.keys(TARGETS) }); res.status(404).json({ success: false, target: target.id, error: `Unknown LamTeknik entity: ${req.params.slug}`, availableEntities: entitiesByTarget.get(target.id).map((entity) => entity.entitySlug).sort() }); });
-app.use("/lamteknik/:slug", (req, res) => res.status(404).json({ success: false, target: "besu", error: `Unknown LamTeknik entity: ${req.params.slug}`, availableEntities: entitiesByTarget.get("besu").map((entity) => entity.entitySlug).sort() }));
+app.use("/blockchains/:target/lamteknik/:slug", (req, res, next) => { const target = TARGETS[req.params.target]; if (!target) return res.status(404).json({ success: false, error: `Unknown blockchain target: ${req.params.target}`, availableTargets: Object.keys(TARGETS) }); const entity = entitiesByTarget.get(target.id).find((candidate) => candidate.entitySlug === req.params.slug); if (entity) return entityRouter(target, entity).handle(req, res, next); res.status(404).json({ success: false, target: target.id, error: `Unknown LamTeknik entity: ${req.params.slug}`, availableEntities: entitiesByTarget.get(target.id).map((candidate) => candidate.entitySlug).sort() }); });
+app.use("/lamteknik/:slug", (req, res, next) => { const entity = entitiesByTarget.get("besu").find((candidate) => candidate.entitySlug === req.params.slug); if (entity) return entityRouter(TARGETS.besu, entity).handle(req, res, next); res.status(404).json({ success: false, target: "besu", error: `Unknown LamTeknik entity: ${req.params.slug}`, availableEntities: entitiesByTarget.get("besu").map((candidate) => candidate.entitySlug).sort() }); });
 process.on("SIGHUP", () => { loadApiKeys(); console.log("[lamteknik] Reloaded API keys"); });
 process.on("SIGTERM", () => fabric.close());
 process.on("SIGINT", () => fabric.close());
