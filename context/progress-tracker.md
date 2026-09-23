@@ -4,12 +4,12 @@ Update this file after every meaningful implementation change.
 
 ## Current Phase
 
-**Single-event Besu smoke-test preparation** — local source backend is healthy; the `.40` gateway has been rebuilt with Hardhat available and is ready for the operator's scoped contract deployment.
+**Single-event Besu smoke test** — local source backend is healthy and the scoped Besu contracts are deployed; waiting for the operator's Postman verification before creating a CDC event.
 
 ## Current Goal
 
-- Deploy only `ContractRegistry` and `AkreditasiStorage` to Besu.
-- Validate one end-to-end CDC event after the deployment is checked in Postman.
+- Verify the Besu deployment through Postman.
+- Validate one end-to-end CDC event only after the operator approves the deployment.
 
 ---
 
@@ -47,14 +47,14 @@ Update this file after every meaningful implementation change.
 
 ## In Progress
 
-- Retry the Besu deployment for `AkreditasiStorage`; the first request safely failed before broadcasting because the old image lacked `hardhat`.
+- Operator Postman verification of the scoped Besu deployment.
 
 ---
 
 ## Next Up
 
-1. **Besu contracts** — deploy and verify `ContractRegistry` plus `AkreditasiStorage`.
-2. **Postman check** — let the operator confirm the deployment before starting the CDC consumer or creating an event.
+1. **Postman check** — confirm the deployed Akreditasi contract through the `.40` gateway.
+2. **CDC smoke test** — start the required CDC path and create exactly one event after operator approval.
 
 ---
 
@@ -74,3 +74,4 @@ Update this file after every meaningful implementation change.
 - 2026-09-10: Added Hyperledger Fabric Postman target configuration (`/blockchains/hyperledger-fabric`) alongside isolated Besu and Go Ethereum namespaces, including Fabric chaincode health and CDC record requests.
 - 2026-09-22: Started the local NestJS source backend with MySQL and Redis. Added `BLOCKCHAIN_ENABLED=false` support so CDC-source mode does not connect directly to Besu; the backend passed compilation and `/api/v1/health`. Besu on `.40` was healthy and unchanged with zero loaded contracts. The scoped `AkreditasiStorage` deployment stopped safely when the gateway reported `hardhat: not found`; `API/Dockerfile` now installs the runtime deployment dependency. No CDC consumer was started and no CDC event was generated.
 - 2026-09-23: Rebuilt and recreated only the `.40` `lamteknik-gateway` service. Its runtime Hardhat CLI is `3.9.0`; Besu health remains successful on chain `1337` with `contractsLoaded: 0` and an empty contracts response. No contract deployment, CDC event, Besu restart, volume deletion, or artifact removal occurred.
+- 2026-09-23: From VM `.41`, deployed `ContractRegistry` at `0x0Be199A777EECc870a7b13045946Fef1803Dd9e1` and only `AkreditasiStorage` at `0xf03b5af17792D7F7707dc54474083BaCAD17e22F`. Gateway verification reported `contractsLoaded: 1`, registry key `LamTeknik:AkreditasiStorage`, and healthy Besu chain ID `1337`. Stopped before starting the CDC consumer or generating an event so the operator can verify with Postman.
